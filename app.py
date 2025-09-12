@@ -9,7 +9,8 @@ app = Flask(__name__)
 app.secret_key = 'your-secret-key-change-this-in-production'
 
 # Global variables
-excel_file_path = r"C:\Users\mnage\Downloads\Tracker 2025-26.xlsx"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+excel_file_path = os.environ.get('EXCEL_PATH', os.path.join(BASE_DIR, 'data', 'Tracker 2025-26.xlsx'))
 parser = None
 schools_data = {}
 
