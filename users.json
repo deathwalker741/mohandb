@@ -1,0 +1,164 @@
+[
+  {
+    "name": "Gargi Ghosh",
+    "division": "East",
+    "email": "gargi.ghosh@ei.study",
+    "password": "264847"
+  },
+  {
+    "name": "Lopamudra Das",
+    "division": "East",
+    "email": "lopamudra.das@ei.study",
+    "password": "689321"
+  },
+  {
+    "name": "Pooja Kapoor",
+    "division": "East",
+    "email": "pooja.kapoor@ei.study",
+    "password": "765972"
+  },
+  {
+    "name": "Rana Sumit Kumar Singh",
+    "division": "East",
+    "email": "rana.singh@ei.study",
+    "password": "269613"
+  },
+  {
+    "name": "Shramana Mukherjee",
+    "division": "East",
+    "email": "shramana.mukherjee@ei.study",
+    "password": "223872"
+  },
+  {
+    "name": "Anushka Gupta",
+    "division": "North",
+    "email": "anushka.gupta@ei.study",
+    "password": "657798"
+  },
+  {
+    "name": "Rohit Kumar",
+    "division": "North",
+    "email": "rohit.kumar@ei.study",
+    "password": "459624"
+  },
+  {
+    "name": "Shruti Chauhan",
+    "division": "North",
+    "email": "shruti.chauhan@ei.study",
+    "password": "697141"
+  },
+  {
+    "name": "Vaishali Yadav",
+    "division": "North",
+    "email": "vaishali.yadav@ei.study",
+    "password": "589112"
+  },
+  {
+    "name": "Virender Verma",
+    "division": "North",
+    "email": "virender.verma@ei.study",
+    "password": "362999"
+  },
+  {
+    "name": "Aruna",
+    "division": "South",
+    "email": "aruna@ei.study",
+    "password": "326816"
+  },
+  {
+    "name": "Jasper Jessie",
+    "division": "South",
+    "email": "jasper.jessie@ei.study",
+    "password": "527714"
+  },
+  {
+    "name": "Nisha Murali",
+    "division": "South",
+    "email": "nisha.murali@ei.study",
+    "password": "446716"
+  },
+  {
+    "name": "Vineeth T V",
+    "division": "South",
+    "email": "vineeth.v@ei.study",
+    "password": "544559"
+  },
+  {
+    "name": "Aarti Iyer",
+    "division": "West",
+    "email": "aarti.iyer@ei.study",
+    "password": "945569"
+  },
+  {
+    "name": "Chaitanya Kolluri",
+    "division": "All Divisions",
+    "email": "chaitanya.kolluri@ei.study",
+    "password": "727327"
+  },
+  {
+    "name": "Hetal Parmar",
+    "division": "West",
+    "email": "hetal.parmar@ei.study",
+    "password": "925176"
+  },
+  {
+    "name": "Ishita Jethwa",
+    "division": "West",
+    "email": "ishita.jethwa@ei.study",
+    "password": "113211"
+  },
+  {
+    "name": "Saloni Shah",
+    "division": "West",
+    "email": "saloni.shah@ei.study",
+    "password": "153932"
+  },
+  {
+    "name": "Ratnabali Mukherjee",
+    "division": "All Divisions",
+    "email": "ratnabali.mukherjee@ei.study",
+    "password": "864991"
+  },
+  {
+    "name": "Aditya Kumar",
+    "division": "South",
+    "email": "aditya.kumar@ei.study",
+    "password": "531113"
+  },
+  {
+    "name": "Manavi Khandelwal",
+    "division": "South",
+    "email": "manavi.khandelwal@ei.study",
+    "password": "562664"
+  },
+  {
+    "name": "Sudhi Malhotra",
+    "division": "North",
+    "email": "sudhi.malhotra@ei.study",
+    "password": "645411"
+  },
+  {
+    "name": "Preeti Kapoor",
+    "division": "West",
+    "email": "preeti.kapoor@ei.study",
+    "password": "983136"
+  },
+  {
+    "name": "Unnati Sharma",
+    "division": "West",
+    "email": "unnati.sharma@ei.study",
+    "password": "243334"
+  },
+  {
+    "name": "Tanya Brooks",
+    "division": "North",
+    "email": "tanya.brooks@ei.study",
+    "password": "868445"
+  },
+  {
+    "name": "Nithya Menon",
+    "division": "South",
+    "email": "nithya.menon@ei.study",
+    "password": "848535"
+  }
+]

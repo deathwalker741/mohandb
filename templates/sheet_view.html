@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}{{ sheet_data.name }} - School Management{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2><i class="fas fa-table me-2"></i>{{ sheet_data.name }}</h2>
+        <p class="text-muted mb-0">{{ schools|length }} schools available for your division</p>
+    </div>
+    <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
+    </a>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <h6><i class="fas fa-info-circle me-2"></i>Sheet Information</h6>
+                <ul class="list-unstyled mb-0">
+                    <li><strong>Total Columns:</strong> {{ sheet_data.columns|length }}</li>
+                    <li><strong>Fixed Columns:</strong> {{ sheet_data.fixed_columns|length }}</li>
+                    <li><strong>Editable Columns:</strong> {{ sheet_data.editable_columns|length }}</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <h6><i class="fas fa-user-shield me-2"></i>Your Access</h6>
+                <ul class="list-unstyled mb-0">
+                    {% if user.division == 'All Divisions' %}
+                    <li><i class="fas fa-check text-success me-2"></i>Full edit access</li>
+                    {% else %}
+                    <li><i class="fas fa-check text-success me-2"></i>Edit access for {{ user.division }} division</li>
+                    <li><i class="fas fa-eye text-info me-2"></i>View access for other divisions</li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-school me-2"></i>Schools List
+        </h5>
+    </div>
+    <div class="card-body p-0">
+        {% if schools %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>School Name</th>
+                        <th>Division/Zone</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for school in schools %}
+                    <tr>
+                        <td>
+                            <strong>{{ school.get('School Name', school.get('Name', 'N/A')) }}</strong>
+                        </td>
+                        <td>
+                            <span class="badge bg-secondary">
+                                {{ school.get('Division', school.get('Zone', 'N/A')) }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if school.can_edit %}
+                            <span class="badge bg-success">Editable</span>
+                            {% else %}
+                            <span class="badge bg-info">View Only</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if school.can_edit %}
+                            <a href="{{ url_for('edit_school', sheet_name=sheet_name, school_id=loop.index0) }}" 
+                               class="btn btn-primary btn-sm">
+                                <i class="fas fa-edit me-1"></i>Edit
+                            </a>
+                            {% else %}
+                            <button class="btn btn-outline-secondary btn-sm" disabled>
+                                <i class="fas fa-eye me-1"></i>View Only
+                            </button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center p-5">
+            <i class="fas fa-school fa-3x text-muted mb-3"></i>
+            <h5 class="text-muted">No schools found</h5>
+            <p class="text-muted">No schools are available for your division in this sheet.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% if sheet_data.editable_columns %}
+<div class="card mt-4">
+    <div class="card-header">
+        <h6 class="mb-0">
+            <i class="fas fa-list me-2"></i>Editable Columns
+        </h6>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            {% for column in sheet_data.editable_columns %}
+            <div class="col-md-4 col-lg-3 mb-2">
+                <span class="badge bg-success">{{ column }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - School Management{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-tachometer-alt me-2"></i>Dashboard</h2>
+    <div class="text-muted">
+        <i class="fas fa-user me-1"></i>{{ user.name }} | 
+        <i class="fas fa-map-marker-alt me-1"></i>{{ user.division }}
+    </div>
+</div>
+
+<div class="row">
+    {% for sheet_name, sheet_data in sheets.items() %}
+    <div class="col-md-6 col-lg-4 mb-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center mb-3">
+                    <div class="bg-primary text-white rounded-circle p-3 me-3">
+                        <i class="fas fa-table fa-lg"></i>
+                    </div>
+                    <div>
+                        <h5 class="card-title mb-1">{{ sheet_data.name }}</h5>
+                        <small class="text-muted">{{ sheet_data.total_rows }} records</small>
+                    </div>
+                </div>
+                
+                <p class="card-text text-muted">
+                    {% if sheet_data.fixed_columns|length > 0 %}
+                        {{ sheet_data.fixed_columns|length }} fixed columns, 
+                        {{ sheet_data.editable_columns|length }} editable columns
+                    {% else %}
+                        All columns are fixed
+                    {% endif %}
+                </p>
+                
+                <div class="d-flex justify-content-between align-items-center">
+                    <a href="{{ url_for('view_sheet', sheet_name=sheet_name) }}" 
+                       class="btn btn-primary btn-sm">
+                        <i class="fas fa-eye me-1"></i>View Data
+                    </a>
+                    <span class="badge bg-secondary">
+                        {{ sheet_data.columns|length }} columns
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-info-circle me-2"></i>Access Information
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-edit me-2"></i>Edit Permissions</h6>
+                        <ul class="list-unstyled">
+                            {% if user.division == 'All Divisions' %}
+                            <li><i class="fas fa-check text-success me-2"></i>Can edit all schools</li>
+                            {% else %}
+                            <li><i class="fas fa-check text-success me-2"></i>Can edit schools in {{ user.division }} division</li>
+                            <li><i class="fas fa-eye text-info me-2"></i>Can view schools from other divisions</li>
+                            {% endif %}
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-columns me-2"></i>Column Restrictions</h6>
+                        <ul class="list-unstyled">
+                            <li><i class="fas fa-lock text-warning me-2"></i>Fixed columns cannot be edited</li>
+                            <li><i class="fas fa-edit text-success me-2"></i>Editable columns can be modified</li>
+                            <li><i class="fas fa-upload text-info me-2"></i>Sheet 6 is read-only (system data)</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
