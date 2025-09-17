@@ -3,10 +3,9 @@ import json
 import os
 from excel_parser import ExcelDataParser
 from werkzeug.security import check_password_hash, generate_password_hash
-import hashlib
 
 app = Flask(__name__)
-app.secret_key = 'your-secret-key-change-this-in-production'
+app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-this-in-production')
 
 # Global variables
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
