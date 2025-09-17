@@ -69,6 +69,11 @@ def index():
                          sheets=schools_data, 
                          user=session['user'])
 
+@app.route('/health')
+def health():
+    """Unauthenticated healthcheck endpoint"""
+    return jsonify({"status": "ok"}), 200
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     """Login page"""
