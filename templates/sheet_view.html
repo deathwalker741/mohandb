@@ -67,7 +67,7 @@
         {% set fixed_count = (fixed_col_count | default(0)) | int %}
         {% set school_no_keys = ['school_no','school_number','schoolcode','school_code','udise_code','udise','serial_no','sr_no','s_no'] %}
         {% set name_keys = ['school_name','name','school','schoolname'] %}
-        {% set div_keys = ['division','zone','divison'] %}
+    {% set div_keys = ['division','zone','divison','division_zone'] %}
         {% set school_no_col = (school_no_keys | select('in', cols) | list | first) %}
         {% set name_col = (name_keys | select('in', cols) | list | first) %}
         {% set div_col = (div_keys | select('in', cols) | list | first) %}
@@ -193,7 +193,7 @@
                         </td>
                         <td>
                             <span class="badge bg-secondary">
-                                {% set division = school.get('division') or school.get('zone') or school.get('divison') %}
+                                {% set division = school.get('division') or school.get('zone') or school.get('divison') or school.get('division_zone') %}
                                 {{ division or 'N/A' }}
                             </span>
                         </td>
