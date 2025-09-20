@@ -361,8 +361,9 @@ def edit_school(table_name, school_id):
             return redirect(url_for('view_sheet', table_name=table_name))
 
     with engine.connect() as connection:
-        query = text(f"SELECT * FROM {sql_ident(table_name)} WHERE {sql_ident('id')} = :school_id")
-        school = connection.execute(query, {'school_id': school_id}).mappings().first()
+        # Cast id to text and bind the parameter as string to avoid type mismatches
+        query = text(f"SELECT * FROM {sql_ident(table_name)} WHERE {sql_ident('id')}::text = :school_id")
+        school = connection.execute(query, {'school_id': str(school_id)}).mappings().first()
 
     if not school:
         flash('School not found!', 'error')
@@ -400,10 +401,11 @@ def view_school_detail(table_name, school_no):
         if not school_no_col:
             flash('School number column not found in this sheet.', 'error')
             return redirect(url_for('view_sheet', table_name=table_name))
+        # Cast school_no column to text for robust matching
         sel = text(
-            f"SELECT * FROM {sql_ident(table_name)} WHERE {sql_ident(school_no_col)} = :sno LIMIT 1"
+            f"SELECT * FROM {sql_ident(table_name)} WHERE {sql_ident(school_no_col)}::text = :sno LIMIT 1"
         )
-        row = conn.execute(sel, {"sno": school_no}).mappings().first()
+        row = conn.execute(sel, {"sno": str(school_no)}).mappings().first()
         if not row:
             flash('School not found in this sheet.', 'error')
             return redirect(url_for('view_sheet', table_name=table_name))
@@ -505,8 +507,8 @@ def update_school(table_name, school_id):
         # Use a no-row result to get column names
         query = text(f"SELECT * FROM {sql_ident(table_name)} WHERE 1=0;")
         columns = list(connection.execute(query).keys())
-        school_query = text(f"SELECT * FROM {sql_ident(table_name)} WHERE {sql_ident('id')} = :school_id")
-        school = connection.execute(school_query, {'school_id': school_id}).mappings().first()
+        school_query = text(f"SELECT * FROM {sql_ident(table_name)} WHERE {sql_ident('id')}::text = :school_id")
+        school = connection.execute(school_query, {'school_id': str(school_id)}).mappings().first()
 
     if not school:
         return jsonify({'success': False, 'message': 'School not found'})
@@ -531,8 +533,8 @@ def update_school(table_name, school_id):
     if not set_clauses:
         return jsonify({'success': False, 'message': 'No data to update'})
 
-    values_to_update['school_id'] = school_id
-    update_statement = f"UPDATE {sql_ident(table_name)} SET {', '.join(set_clauses)} WHERE {sql_ident('id')} = :school_id"
+    values_to_update['school_id'] = str(school_id)
+    update_statement = f"UPDATE {sql_ident(table_name)} SET {', '.join(set_clauses)} WHERE {sql_ident('id')}::text = :school_id"
 
     try:
         with engine.connect() as connection:
@@ -577,7 +579,7 @@ def update_school(table_name, school_id):
                             update_aus_sql = (
                                 f"UPDATE {sql_ident('all_unique_schools')} "
                                 f"SET {', '.join(set_clauses_aus)} "
-                                f"WHERE {sql_ident(aus_school_no_col)} = :aus_school_no"
+                                f"WHERE {sql_ident(aus_school_no_col)}::text = :aus_school_no"
                             )
                             result = connection.execute(text(update_aus_sql), aus_values)
 
