@@ -123,8 +123,8 @@
         </div>
         {% endif %}
     </div>
-</div>
-<script>
+     </div>
+    <script>
 // Debug-friendly logging
 function svlog(...args) { try { console.log('[sheet_view]', ...args); } catch(_) {} }
 function sverr(...args) { try { console.error('[sheet_view]', ...args); } catch(_) {} }
@@ -178,6 +178,29 @@ window.addEventListener('error', (e) => {
     sverr('uncaught error', { message: e.message, error: e.error });
 });
 </script>
+<!-- Fixed (uneditable) columns section -->
+{% set fixed_count = (fixed_col_count | default(0)) | int %}
+{% set editable_count = (columns|length - fixed_count) if columns else 0 %}
+<div id="fixedColumnsCard" class="card d-none mt-3">
+    <div class="card-header">
+        <h6 class="mb-0"><i class="fas fa-lock me-2"></i>Uneditable (fixed) columns ({{ fixed_count }})</h6>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            {% for column in columns[:fixed_count] %}
+            <div class="col-md-4 col-lg-3 mb-2">
+                <span class="badge bg-secondary">{{ column }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Editable columns section -->
+<div id="editableColumnsCard" class="card d-none mt-3">
+    <div class="card-header">
+        <h6 class="mb-0"><i class="fas fa-pen me-2"></i>Editable columns ({{ editable_count }})</h6>
+    </div>
     <div class="card-body">
         <div class="row">
             {% for column in columns[fixed_count:] %}
@@ -188,25 +211,4 @@ window.addEventListener('error', (e) => {
         </div>
     </div>
 </div>
-{% endif %}
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-  const toggleFixed = document.getElementById('toggleFixed');
-  const toggleEditable = document.getElementById('toggleEditable');
-  const fixedCard = document.getElementById('fixedColumnsCard');
-  const editableCard = document.getElementById('editableColumnsCard');
-
-  if (toggleFixed && fixedCard) {
-    toggleFixed.addEventListener('change', () => {
-      fixedCard.classList.toggle('d-none', !toggleFixed.checked);
-    });
-  }
-  if (toggleEditable && editableCard) {
-    toggleEditable.addEventListener('change', () => {
-      editableCard.classList.toggle('d-none', !toggleEditable.checked);
-    });
-  }
-});
-</script>
 {% endblock %}
