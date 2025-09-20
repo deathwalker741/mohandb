@@ -93,17 +93,16 @@
                         <h6><i class="fas fa-edit me-2"></i>Edit Permissions</h6>
                                                                         <ul class="list-unstyled">
                                                                                 {% set email_lower = (user.email or '')|lower %}
-                                                                                {% set is_ei = user.is_ei or (email_lower[-8:] == '@ei.study') %}
-                                                                                {% if is_ei %}
+                                                                                {% if user.is_ei %}
                                                                                     {% if email_lower == 'mohan.kumar@ei.study' %}
-                                                                <li><i class="fas fa-check text-success me-2"></i>EI admin: Can edit all schools</li>
-                                                            {% else %}
-                                                                <li><i class="fas fa-eye text-info me-2"></i>EI user: View all schools (no edit)</li>
-                                                            {% endif %}
-                                                        {% else %}
-                                                            <li><i class="fas fa-check text-success me-2"></i>Can edit schools in {{ user.division }} division</li>
-                                                            <li><i class="fas fa-eye text-info me-2"></i>Can view schools from other divisions</li>
-                                                        {% endif %}
+                                                                                        <li><i class="fas fa-check text-success me-2"></i>EI admin: Can edit all schools</li>
+                                                                                    {% else %}
+                                                                                        <li><i class="fas fa-eye text-info me-2"></i>EI email login: View-only</li>
+                                                                                    {% endif %}
+                                                                                {% else %}
+                                                                                    <li><i class="fas fa-check text-success me-2"></i>Can edit schools in {{ user.division }} division</li>
+                                                                                    <li><i class="fas fa-eye text-info me-2"></i>Can view schools from other divisions</li>
+                                                                                {% endif %}
                                                 </ul>
                     </div>
                     <div class="col-md-6">

@@ -39,12 +39,11 @@
                 <h6><i class="fas fa-user-shield me-2"></i>Your Access</h6>
                 <ul class="list-unstyled mb-0">
                     {% set email_lower = (user.email or '')|lower %}
-                    {% set is_ei = user.is_ei or (email_lower[-8:] == '@ei.study') %}
-                    {% if is_ei %}
+                    {% if user.is_ei %}
                         {% if email_lower == 'mohan.kumar@ei.study' %}
                             <li><i class="fas fa-check text-success me-2"></i>EI admin: Full edit access</li>
                         {% else %}
-                            <li><i class="fas fa-eye text-info me-2"></i>EI user: View all schools (no edit)</li>
+                            <li><i class="fas fa-eye text-info me-2"></i>EI email login: View-only</li>
                         {% endif %}
                     {% else %}
                         <li><i class="fas fa-check text-success me-2"></i>Edit access for {{ user.division }} division</li>

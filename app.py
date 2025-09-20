@@ -57,11 +57,11 @@ def can_edit_school(user, school_data):
     # Only this EI email has edit access globally
     if email == 'mohan.kumar@ei.study':
         return True
-    # EI users (other than Mohan) are view-only
-    if user.get('is_ei') or email.endswith('@ei.study'):
+    # EI email-only login users (is_ei flag) are view-only
+    if user.get('is_ei'):
         return False
     # Division-scoped users
-    if user.get('division') == 'All Divisions':
+    if str(user.get('division', '')).strip() == 'All Divisions':
         return True
     # Try common variants
     school_division = (
@@ -94,9 +94,8 @@ def is_super_editor(user) -> bool:
     return email == 'mohan.kumar@ei.study'
 
 def is_ei_user(user) -> bool:
-    """True if user has EI-level access (any @ei.study or is_ei flag)."""
-    email = str(user.get('email', '')).strip().lower()
-    return bool(user.get('is_ei') or email.endswith('@ei.study'))
+    """True only for EI email-only login (is_ei flag). Division users from users.json are not EI here."""
+    return bool(user.get('is_ei'))
 
 def get_school_division(row: dict) -> str:
     """Best-effort to get a row's division/zone string."""
