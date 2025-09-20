@@ -15,11 +15,39 @@
 
 <div class="card mb-3">
   <div class="card-body">
+    <div class="d-flex align-items-center flex-wrap gap-3 mb-3">
+      <div class="form-check form-check-inline">
+        <input class="form-check-input" type="checkbox" id="sec_current">
+        <label class="form-check-label" for="sec_current">{{ ext_labels.current }}</label>
+      </div>
+      <div class="form-check form-check-inline">
+        <input class="form-check-input" type="checkbox" id="sec_asset" {% if not ext_sections or (ext_sections.asset|length == 0) %}disabled{% endif %}>
+        <label class="form-check-label" for="sec_asset">{{ ext_labels.asset }}</label>
+      </div>
+      <div class="form-check form-check-inline">
+        <input class="form-check-input" type="checkbox" id="sec_cares" {% if not ext_sections or (ext_sections.cares|length == 0) %}disabled{% endif %}>
+        <label class="form-check-label" for="sec_cares">{{ ext_labels.cares }}</label>
+      </div>
+      <div class="form-check form-check-inline">
+        <input class="form-check-input" type="checkbox" id="sec_mm" {% if not ext_sections or (ext_sections.mm|length == 0) %}disabled{% endif %}>
+        <label class="form-check-label" for="sec_mm">{{ ext_labels.mm }}</label>
+      </div>
+      <div class="form-check form-check-inline">
+        <input class="form-check-input" type="checkbox" id="sec_me" {% if not ext_sections or (ext_sections.me|length == 0) %}disabled{% endif %}>
+        <label class="form-check-label" for="sec_me">{{ ext_labels.me }}</label>
+      </div>
+      <div class="form-check form-check-inline">
+        <input class="form-check-input" type="checkbox" id="sec_ms" {% if not ext_sections or (ext_sections.ms|length == 0) %}disabled{% endif %}>
+        <label class="form-check-label" for="sec_ms">{{ ext_labels.ms }}</label>
+      </div>
+    </div>
+
     <div class="row g-3">
+      {# Current Info section - base row fields #}
       {% set cols = columns or [] %}
       {% set fixed_count = (fixed_col_count | default(0)) | int %}
       {% for c in cols %}
-        <div class="col-md-6 col-lg-4">
+        <div class="col-md-6 col-lg-4 section-block d-none" data-section="current">
           <div class="border rounded p-3 h-100">
             <div class="small text-uppercase text-muted">{{ c.replace('_',' ')|title }}</div>
             <div class="fw-bold">{{ school.get(c) if school.get(c) is not none and school.get(c) != '' else '—' }}</div>
@@ -31,6 +59,23 @@
           </div>
         </div>
       {% endfor %}
+
+      {# External sections - render key-value pairs #}
+      {% if ext_sections %}
+        {% for key, data in ext_sections.items() %}
+          {% if data and data|length > 0 %}
+            {% for k, v in data.items() %}
+              <div class="col-md-6 col-lg-4 section-block d-none" data-section="{{ key }}">
+                <div class="border rounded p-3 h-100">
+                  <div class="small text-uppercase text-muted">{{ k.replace('_',' ')|title }}</div>
+                  <div class="fw-bold">{{ v if v is not none and v != '' else '—' }}</div>
+                  <span class="badge bg-info mt-2">{{ ext_labels[key] }}</span>
+                </div>
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endfor %}
+      {% endif %}
     </div>
   </div>
 </div>
@@ -44,4 +89,50 @@
   <span class="text-muted"><i class="fas fa-eye me-1"></i>View only</span>
   {% endif %}
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function svlog(){try{console.log.apply(console,['[view_school]'].concat(Array.from(arguments)))}catch(e){}}
+function sverr(){try{console.error.apply(console,['[view_school]'].concat(Array.from(arguments)))}catch(e){}}
+
+document.addEventListener('DOMContentLoaded', function() {
+  const tableName = "{{ table_name }}";
+  let schoolData = {};
+  try {
+    const el = document.getElementById('school-json');
+    if (el) schoolData = JSON.parse(el.textContent || '{}');
+  } catch(e) { sverr('json parse', e); }
+  const possible = ['school_no','school_number','schoolcode','school_code','udise_code','udise','serial_no','sr_no','s_no'];
+  let sno = null;
+  for (const k of possible) { if (schoolData && schoolData[k]) { sno = schoolData[k]; break; } }
+  const schoolKey = `vs_${tableName}_${sno ?? 'row'}`;
+
+  const sections = ['current','asset','cares','mm','me','ms'];
+  const chk = (id) => document.getElementById('sec_' + id);
+  const sel = (sec) => document.querySelectorAll(`.section-block[data-section="${sec}"]`);
+  const setVis = (sec, show) => sel(sec).forEach(el=>el.classList.toggle('d-none', !show));
+
+  // init from storage (default show current only)
+  let state = { current: true, asset: false, cares: false, mm: false, me: false, ms: false };
+  try {
+    const raw = localStorage.getItem(schoolKey);
+    if (raw) state = Object.assign(state, JSON.parse(raw));
+  } catch (e) { sverr('storage read', e); }
+
+  sections.forEach(sec => {
+    const el = chk(sec);
+    if (!el) return;
+    el.checked = !!state[sec];
+    setVis(sec, !!state[sec]);
+    el.addEventListener('change', () => {
+      state[sec] = !!el.checked;
+      setVis(sec, state[sec]);
+      try { localStorage.setItem(schoolKey, JSON.stringify(state)); } catch (e) { sverr('storage write', e); }
+      svlog('toggle', { sec, show: state[sec] });
+    });
+  });
+});
+</script>
+<script id="school-json" type="application/json">{{ school | tojson }}</script>
 {% endblock %}

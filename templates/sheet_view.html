@@ -19,9 +19,16 @@
             <div class="card-body">
                 <h6><i class="fas fa-info-circle me-2"></i>Sheet Information</h6>
                 <ul class="list-unstyled mb-0">
-                    <li><strong>Total Columns:</strong> {{ columns|length }}</li>
+                    {% set _ext = ext_columns if ext_columns else {} %}
+                    {% set _ext_len = (_ext.asset|length if _ext.asset else 0)
+                        + (_ext.cares|length if _ext.cares else 0)
+                        + (_ext.mm|length if _ext.mm else 0)
+                        + (_ext.me|length if _ext.me else 0)
+                        + (_ext.ms|length if _ext.ms else 0) %}
+                    {% set _base_total = (columns|length) - _ext_len %}
+                    <li><strong>Total Columns:</strong> {{ _base_total }}</li>
                     <li><strong>Fixed Columns:</strong> {{ fixed_col_count }}</li>
-                    <li><strong>Editable Columns:</strong> {{ columns|length - fixed_col_count }}</li>
+                    <li><strong>Editable Columns:</strong> {{ _base_total - fixed_col_count }}</li>
                 </ul>
             </div>
         </div>

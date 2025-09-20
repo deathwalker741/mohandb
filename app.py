@@ -388,6 +388,58 @@ def view_school_detail(table_name, school_no):
     except Exception:
         edit_id = None
 
+    # Build external sections (only for all_unique_schools view)
+    ext_sections = {}
+    if table_name == 'all_unique_schools':
+        try:
+            with engine.connect() as conn:
+                # Resolve school number value from the current row if possible
+                cols_here = list(school.keys())
+                sno_key_here = find_school_no_column(cols_here)
+                sno_val = school.get(sno_key_here) if sno_key_here else school_no
+
+                def fetch_one_by_sno(tname: str):
+                    cols = fetch_columns(conn, tname)
+                    sno_col = find_school_no_column(cols)
+                    if not sno_col:
+                        return {}
+                    rs = conn.execute(
+                        text(f"SELECT * FROM {sql_ident(tname)} WHERE {sql_ident(sno_col)} = :s LIMIT 1"),
+                        {"s": sno_val},
+                    ).mappings().first()
+                    if not rs:
+                        return {}
+                    d = dict(rs)
+                    # drop id and school number col
+                    for drop in ['id', sno_col]:
+                        if drop in d:
+                            d.pop(drop, None)
+                    return d
+
+                related = {
+                    'asset': 'asset_schools',
+                    'cares': 'cares_schools',
+                    'mm': 'mindspark_math_schools',
+                    'me': 'mindspark_english_schools',
+                    'ms': 'mindspark_science_schools',
+                }
+                for key, tname in related.items():
+                    ext_sections[key] = fetch_one_by_sno(tname)
+        except Exception as e:
+            try:
+                app.logger.warning(f"view_school_detail ext fetch failed: {e}")
+            except Exception:
+                pass
+
+    ext_labels = {
+        'current': 'Current Info',
+        'asset': 'ASSET',
+        'cares': 'CARES',
+        'mm': 'MS Math',
+        'me': 'MS English',
+        'ms': 'MS Science',
+    }
+
     return render_template(
         'view_school.html',
         sheet_name=config['name'],
@@ -398,6 +450,8 @@ def view_school_detail(table_name, school_no):
         user=user,
         can_edit_row=can_edit_row and (edit_id is not None),
         edit_id=edit_id,
+        ext_sections=ext_sections,
+        ext_labels=ext_labels,
     )
 
 @app.route('/update/<table_name>/<int:school_id>', methods=['POST'])
