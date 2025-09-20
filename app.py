@@ -101,23 +101,43 @@ def get_school_division(row: dict) -> str:
     """Best-effort to get a row's division/zone string.
 
     Priorities:
-    1) Pre-resolved key _division_resolved if present
-    2) Base columns: zone / division / divison
-    3) Any namespaced ext column ending with __zone / __division / __divison
+    1) _division_resolved if present
+    2) Any base/namespaced key whose normalized name matches zone/division variants
+       Normalization = lowercase and strip all non-letters
+    3) Any namespaced ext column ending with __zone / __division / __divison (case-insensitive)
     """
     try:
-        if isinstance(row, dict):
-            if row.get('_division_resolved'):
-                return str(row.get('_division_resolved'))
-            base = row.get('zone') or row.get('division') or row.get('divison')
-            if base:
-                return str(base)
-            for k, v in row.items():
-                if not v:
-                    continue
-                kl = str(k).lower()
-                if kl.endswith('__zone') or kl.endswith('__division') or kl.endswith('__divison'):
-                    return str(v)
+        if not isinstance(row, dict):
+            return ''
+
+        # 1) Pre-resolved
+        if row.get('_division_resolved'):
+            return str(row.get('_division_resolved'))
+
+        # Helper: normalize key to letters-only lowercase
+        def norm(k: str) -> str:
+            return re.sub(r'[^a-z]', '', str(k).lower())
+
+        # Acceptable normalized key names for base fields
+        base_targets = {
+            'zone', 'division', 'divison',  # common spellings
+            'divisionzone', 'zonedivision'  # combined forms like "Division/Zone"
+        }
+
+        # 2) Scan all keys for base-like matches
+        for k, v in row.items():
+            if v is None or v == '':
+                continue
+            nk = norm(k)
+            if nk in base_targets:
+                return str(v).strip()
+
+        # 3) Fallback: explicit namespaced suffix check
+        for k, v in row.items():
+            if v is None or v == '':
+                continue
+            if re.search(r'__(zone|division|divison)$', str(k), flags=re.IGNORECASE):
+                return str(v).strip()
     except Exception:
         pass
     return ''
@@ -134,7 +154,8 @@ def matches_user_division(user, row: dict) -> bool:
 
 # Common key variants for School Number across sheets
 SCHOOL_NO_KEYS = [
-    'school_no', 'school_number', 'schoolcode', 'school_code',
+    'school_no', 'school number', 'school_number', 'schoolcode', 'school_code',
+    'school no', 'schoolno',
     'udise_code', 'udise', 'serial_no', 'sr_no', 's_no'
 ]
 
