@@ -95,8 +95,16 @@
         {% set display_fixed_count = dyn_fixed_cols|length %}
         {% set display_editable_count = dyn_editable_cols|length %}
         <div class="p-3 border-bottom bg-light d-flex align-items-center justify-content-between flex-wrap gap-2">
-            <div>
+            <div class="d-flex align-items-center gap-3 flex-wrap">
                 <span class="text-muted small">Sheet: <strong>{{ sheet_name }}</strong></span>
+                <div class="input-group input-group-sm" style="max-width: 320px;">
+                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                    <input type="text" id="rowSearch" class="form-control" placeholder="Search rows...">
+                    <button class="btn btn-outline-secondary" type="button" id="clearRowSearch" title="Clear">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <span class="small text-muted" id="rowSearchCount"></span>
             </div>
             <div>
                 <div class="form-check form-check-inline">
@@ -270,17 +278,41 @@
         });
     }
 
+    function applyRowSearch(term) {
+        const tbody = document.querySelector('table tbody');
+        const rows = tbody ? Array.from(tbody.querySelectorAll('tr')) : [];
+        const q = (term || '').toString().trim().toLowerCase();
+        let shown = 0;
+        rows.forEach(tr => {
+            if (!q) {
+                tr.classList.remove('d-none');
+                shown++;
+                return;
+            }
+            const txt = (tr.textContent || '').toLowerCase();
+            const match = txt.indexOf(q) !== -1;
+            tr.classList.toggle('d-none', !match);
+            if (match) shown++;
+        });
+        const countEl = document.getElementById('rowSearchCount');
+        if (countEl) {
+            const total = rows.length;
+            countEl.textContent = q ? `Showing ${shown} of ${total}` : '';
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
-        const tableName = "{{ table_name }}";
+    const tableName = "{{ table_name }}";
         const toggleFixed = document.getElementById('toggleFixed');
         const toggleEditable = document.getElementById('toggleEditable');
         const isAUS = tableName === 'all_unique_schools';
 
         if (!toggleFixed || !toggleEditable) sverr('checkbox elements missing');
 
-        const keyFixed = `sv_fixed_${tableName}`;
+    const keyFixed = `sv_fixed_${tableName}`;
         const keyEditable = `sv_editable_${tableName}`;
         const keyExt = (p) => `sv_ext_${p}_${tableName}`;
+    const keySearch = `sv_q_${tableName}`;
 
         // Initialize from localStorage
         try {
@@ -297,6 +329,11 @@
                     if (saved !== null) el.checked = saved === '1';
                 });
             }
+            const savedQ = localStorage.getItem(keySearch);
+            const input = document.getElementById('rowSearch');
+            if (input && savedQ !== null) {
+                input.value = savedQ;
+            }
         } catch (e) { sverr('localStorage read failed', e); }
 
         // Apply initial visibility to table columns
@@ -309,6 +346,10 @@
                 applyExtVisibility(p, !!el.checked);
             });
         }
+
+        // Apply initial search filter
+        const input = document.getElementById('rowSearch');
+        if (input) applyRowSearch(input.value);
 
         // Wire up handlers with persistence
         if (toggleFixed) {
@@ -337,6 +378,23 @@
                     try { localStorage.setItem(keyExt(p), show ? '1' : '0'); } catch (e) { sverr('localStorage write ext failed', e); }
                     svlog('toggle ext', { tableName, prefix: p, show });
                 });
+            });
+        }
+
+        // Wire search handlers
+        const clearBtn = document.getElementById('clearRowSearch');
+        if (input) {
+            input.addEventListener('input', () => {
+                const val = input.value || '';
+                try { localStorage.setItem(keySearch, val); } catch (e) { sverr('localStorage write search failed', e); }
+                applyRowSearch(val);
+            });
+        }
+        if (clearBtn && input) {
+            clearBtn.addEventListener('click', () => {
+                input.value = '';
+                try { localStorage.removeItem(keySearch); } catch (e) { sverr('localStorage clear search failed', e); }
+                applyRowSearch('');
             });
         }
     });

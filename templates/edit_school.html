@@ -24,6 +24,13 @@
                 </h5>
             </div>
             <div class="card-body">
+                <div class="d-flex justify-content-end mb-3">
+                    <div class="input-group input-group-sm" style="max-width: 320px;">
+                        <span class="input-group-text"><i class="fas fa-search"></i></span>
+                        <input type="text" id="editSearch" class="form-control" placeholder="Search fields...">
+                        <button class="btn btn-outline-secondary" id="editClear" type="button"><i class="fas fa-times"></i></button>
+                    </div>
+                </div>
                 <form id="editForm">
                     <div class="row">
                         <!-- Fixed Columns (Read-only) -->
@@ -258,6 +265,24 @@ document.querySelectorAll('.editable-field').forEach(field => {
             this.style.borderColor = '#e9ecef';
         }
     });
+});
+</script>
+<script>
+// Edit page field search
+document.addEventListener('DOMContentLoaded', function(){
+    function applyFilter(term){
+        var q = (term||'').toString().trim().toLowerCase();
+        var groups = document.querySelectorAll('#editForm .col-md-6.mb-3');
+        for (var i=0;i<groups.length;i++){
+            var txt = (groups[i].textContent||'').toLowerCase();
+            var match = q ? txt.indexOf(q) !== -1 : true;
+            groups[i].style.display = match ? '' : 'none';
+        }
+    }
+    var input = document.getElementById('editSearch');
+    var clearBtn = document.getElementById('editClear');
+    input && input.addEventListener('input', function(){ applyFilter(input.value); });
+    clearBtn && input && clearBtn.addEventListener('click', function(){ input.value=''; applyFilter(''); });
 });
 </script>
 {% endblock %}

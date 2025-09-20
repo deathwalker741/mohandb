@@ -11,9 +11,18 @@
     </div>
 </div>
 
-<div class="row">
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="input-group" style="max-width: 420px;">
+        <span class="input-group-text"><i class="fas fa-search"></i></span>
+        <input type="text" id="dashSearch" class="form-control" placeholder="Search sheets...">
+        <button class="btn btn-outline-secondary" id="dashClear" type="button"><i class="fas fa-times"></i></button>
+    </div>
+    <span class="small text-muted" id="dashSearchCount"></span>
+    </div>
+
+<div class="row" id="dashCards">
     {% for sheet_name, sheet_data in sheets.items() %}
-    <div class="col-md-6 col-lg-4 mb-4">
+    <div class="col-md-6 col-lg-4 mb-4 dash-card" data-name="{{ sheet_data.name|lower }}" data-fixed="{{ sheet_data.fixed_cols|join(' ')|lower }}" data-editable="{{ sheet_data.editable_cols|join(' ')|lower }}">
         <div class="card h-100">
             <div class="card-body">
                 <div class="d-flex align-items-center mb-3">
@@ -67,6 +76,7 @@
         </div>
     </div>
     {% endfor %}
+    </div>
 </div>
 
 <div class="row mt-4">
@@ -136,6 +146,41 @@ function toggleDashSection(name, which) {
 document.addEventListener('DOMContentLoaded', () => {
     try {
         dbg('DOMContentLoaded');
+        const input = document.getElementById('dashSearch');
+        const clearBtn = document.getElementById('dashClear');
+        const countEl = document.getElementById('dashSearchCount');
+        const cards = Array.from(document.querySelectorAll('#dashCards .dash-card'));
+        const key = 'dash_q';
+
+        function apply(q){
+            const term = (q||'').toString().trim().toLowerCase();
+            let shown = 0;
+            cards.forEach(col => {
+                const name = col.getAttribute('data-name') || '';
+                const fixed = col.getAttribute('data-fixed') || '';
+                const editable = col.getAttribute('data-editable') || '';
+                const blob = name + ' ' + fixed + ' ' + editable;
+                const match = term ? blob.indexOf(term) !== -1 : true;
+                col.classList.toggle('d-none', !match);
+                if (match) shown++;
+            });
+            if (countEl) countEl.textContent = term ? `Showing ${shown} of ${cards.length}` : '';
+        }
+
+        // Restore saved query
+        try { const saved = localStorage.getItem(key); if (saved && input) input.value = saved; } catch(e) {}
+        apply(input ? input.value : '');
+
+        input && input.addEventListener('input', () => {
+            const val = input.value || '';
+            try { localStorage.setItem(key, val); } catch(e) {}
+            apply(val);
+        });
+        clearBtn && input && clearBtn.addEventListener('click', () => {
+            input.value = '';
+            try { localStorage.removeItem(key); } catch(e) {}
+            apply('');
+        });
         // Log available fixed/editable containers and checkboxes per sheet
         const fixedSections = Array.from(document.querySelectorAll('[id^="dash-fixed-cols-"]')).map(el => el.id);
         const editableSections = Array.from(document.querySelectorAll('[id^="dash-editable-cols-"]')).map(el => el.id);

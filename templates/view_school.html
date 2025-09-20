@@ -40,6 +40,13 @@
         <input class="form-check-input" type="checkbox" id="sec_ms" {% if not ext_sections or (ext_sections.ms|length == 0) %}disabled{% endif %}>
         <label class="form-check-label" for="sec_ms">{{ ext_labels.ms }}</label>
       </div>
+      <div class="ms-auto d-flex align-items-center gap-2" style="min-width: 260px;">
+        <div class="input-group input-group-sm">
+          <span class="input-group-text"><i class="fas fa-search"></i></span>
+          <input type="text" id="vsSearch" class="form-control" placeholder="Search fields...">
+          <button class="btn btn-outline-secondary" id="vsClear" type="button"><i class="fas fa-times"></i></button>
+        </div>
+      </div>
     </div>
 
     <div class="row g-3">
@@ -144,6 +151,21 @@ document.addEventListener('DOMContentLoaded', function () {
       });
     })(sections[s]);
   }
+
+  // Search filter for visible tiles
+  function applyFilter(term){
+    var q = (term||'').toString().trim().toLowerCase();
+    var cards = document.querySelectorAll('.section-block:not(.d-none)');
+    for (var i=0;i<cards.length;i++){
+      var txt = (cards[i].textContent||'').toLowerCase();
+      var match = q ? txt.indexOf(q) !== -1 : true;
+      cards[i].style.display = match ? '' : 'none';
+    }
+  }
+  var input = document.getElementById('vsSearch');
+  var clearBtn = document.getElementById('vsClear');
+  input && input.addEventListener('input', function(){ applyFilter(input.value); });
+  clearBtn && input && clearBtn.addEventListener('click', function(){ input.value=''; applyFilter(''); });
 });
 </script>
 <script id="school-json" type="application/json">{{ school | tojson }}</script>
