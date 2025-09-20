@@ -47,6 +47,14 @@ def can_edit_school(user, school_data):
     Be tolerant to different column names that may come from Excel normalization
     (e.g., 'zone' vs 'division').
     """
+    email = str(user.get('email', '')).strip().lower()
+    # Only this EI email has edit access globally
+    if email == 'mohan.kumar@ei.study':
+        return True
+    # EI users (other than Mohan) are view-only
+    if user.get('is_ei') or email.endswith('@ei.study'):
+        return False
+    # Division-scoped users
     if user.get('division') == 'All Divisions':
         return True
     # Try common variants
@@ -150,7 +158,8 @@ def login_ei():
     session['user'] = {
         'name': email.split('@')[0].replace('.', ' ').title(),
         'email': email,
-        'division': 'All Divisions'
+        'division': 'All Divisions',
+        'is_ei': True
     }
     flash('Logged in with EI access (All Divisions).', 'success')
     return redirect(url_for('index'))
@@ -182,8 +191,10 @@ def view_sheet(table_name):
     schools_list = [dict(school) for school in result]
     for school in schools_list:
         school['can_edit'] = can_edit_school(user, school)
-    # Show only schools the user can edit
-    schools_list = [s for s in schools_list if s.get('can_edit')]
+    # EI users can view all schools; division users see only their editable schools
+    is_ei_user = bool(user.get('is_ei') or str(user.get('email','')).lower().endswith('@ei.study'))
+    if not is_ei_user:
+        schools_list = [s for s in schools_list if s.get('can_edit')]
         
     config = SHEET_CONFIGS[table_name]
     fixed_cols = config['fixed_columns']

@@ -31,11 +31,17 @@
             <div class="card-body">
                 <h6><i class="fas fa-user-shield me-2"></i>Your Access</h6>
                 <ul class="list-unstyled mb-0">
-                    {% if user.division == 'All Divisions' %}
-                    <li><i class="fas fa-check text-success me-2"></i>Full edit access</li>
+                    {% set email_lower = (user.email or '')|lower %}
+                    {% set is_ei = user.is_ei or (email_lower[-8:] == '@ei.study') %}
+                    {% if is_ei %}
+                        {% if email_lower == 'mohan.kumar@ei.study' %}
+                            <li><i class="fas fa-check text-success me-2"></i>EI admin: Full edit access</li>
+                        {% else %}
+                            <li><i class="fas fa-eye text-info me-2"></i>EI user: View all schools (no edit)</li>
+                        {% endif %}
                     {% else %}
-                    <li><i class="fas fa-check text-success me-2"></i>Edit access for {{ user.division }} division</li>
-                    <li><i class="fas fa-eye text-info me-2"></i>View access for other divisions</li>
+                        <li><i class="fas fa-check text-success me-2"></i>Edit access for {{ user.division }} division</li>
+                        <li><i class="fas fa-eye text-info me-2"></i>View access for other divisions</li>
                     {% endif %}
                 </ul>
             </div>
@@ -147,10 +153,14 @@
                         </td>
                         {% endfor %}
                         <td>
+                            {% if school.can_edit %}
                             <a href="{{ url_for('edit_school', table_name=table_name, school_id=school.id) }}" 
                                class="btn btn-primary btn-sm">
                                 <i class="fas fa-edit me-1"></i>Edit
                             </a>
+                            {% else %}
+                            <span class="text-muted small"><i class="fas fa-eye me-1"></i>View only</span>
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}
@@ -179,7 +189,7 @@
     }
 
     document.addEventListener('DOMContentLoaded', function() {
-        const tableName = {{ table_name|tojson }};
+        const tableName = "{{ table_name }}";
         const toggleFixed = document.getElementById('toggleFixed');
         const toggleEditable = document.getElementById('toggleEditable');
 
