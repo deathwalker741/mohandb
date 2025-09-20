@@ -222,6 +222,86 @@ def view_sheet(table_name):
         if not allow_actions:
             # Force no edit button on read-only sheets
             school['can_edit'] = False
+    # If viewing all_unique_schools, merge optional columns from related sheets using school_no
+    ext_columns = {}
+    if table_name == 'all_unique_schools' and schools_list:
+        try:
+            with engine.connect() as conn:
+                aus_cols = columns
+                aus_sno_col = find_school_no_column(aus_cols)
+                # Build list of school_no values present
+                aus_snos = []
+                for r in schools_list:
+                    sno = get_school_no_from_row(r)
+                    if sno is not None:
+                        aus_snos.append(sno)
+                # Deduplicate while preserving order
+                seen = set()
+                aus_snos = [x for x in aus_snos if not (x in seen or seen.add(x))]
+
+                def fetch_map_for_table(tname: str):
+                    cols = fetch_columns(conn, tname)
+                    sno_col = find_school_no_column(cols)
+                    if not sno_col or not aus_snos:
+                        return cols, sno_col, {}
+                    # Build IN clause safely with enumerated params
+                    param_names = []
+                    params = {}
+                    for i, val in enumerate(aus_snos):
+                        pname = f"v{i}"
+                        param_names.append(f":{pname}")
+                        params[pname] = val
+                    in_list = ", ".join(param_names)
+                    sql = text(
+                        f"SELECT * FROM {sql_ident(tname)} WHERE {sql_ident(sno_col)} IN ({in_list})"
+                    )
+                    rows = conn.execute(sql, params).mappings().all()
+                    m = {}
+                    for row in rows:
+                        try:
+                            key = row.get(sno_col)
+                        except Exception:
+                            key = None
+                        if key is not None and key not in m:
+                            m[key] = dict(row)
+                    return cols, sno_col, m
+
+                related = [
+                    ("asset", "asset_schools"),
+                    ("cares", "cares_schools"),
+                    ("mm", "mindspark_math_schools"),
+                    ("me", "mindspark_english_schools"),
+                    ("ms", "mindspark_science_schools"),
+                ]
+                for prefix, tname in related:
+                    rel_cols, rel_sno_col, rel_map = fetch_map_for_table(tname)
+                    if not rel_cols or not rel_sno_col:
+                        continue
+                    # Determine displayable columns (exclude id and school_no)
+                    disp_cols = [c for c in rel_cols if c not in ('id', rel_sno_col)]
+                    namespaced_cols = []
+                    for c in disp_cols:
+                        ns = f"{prefix}__{c}"
+                        namespaced_cols.append(ns)
+                    # Merge into each school row
+                    if namespaced_cols:
+                        for s in schools_list:
+                            sno = get_school_no_from_row(s)
+                            if sno is None:
+                                continue
+                            ext_row = rel_map.get(sno)
+                            if not ext_row:
+                                continue
+                            for c in disp_cols:
+                                s[f"{prefix}__{c}"] = ext_row.get(c)
+                        ext_columns[prefix] = namespaced_cols
+                        # Also extend columns so template logic can include them if needed (treated as editable side)
+                        columns.extend(namespaced_cols)
+        except Exception as merge_err:
+            try:
+                app.logger.warning(f"AUS merge columns skipped: {merge_err}")
+            except Exception:
+                pass
     # EI users can view all schools; division users see only their editable schools on editable sheets
     is_ei_user = bool(user.get('is_ei') or str(user.get('email','')).lower().endswith('@ei.study'))
     if not is_ei_user and allow_actions:
@@ -237,7 +317,8 @@ def view_sheet(table_name):
                          columns=columns,
                          fixed_col_count=fixed_cols,
                          user=user,
-                         allow_actions=allow_actions)
+                         allow_actions=allow_actions,
+                         ext_columns=ext_columns)
 
 @app.route('/edit/<table_name>/<int:school_id>')
 def edit_school(table_name, school_id):
