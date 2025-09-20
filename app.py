@@ -99,6 +99,9 @@ def is_ei_user(user) -> bool:
 
 def get_school_division(row: dict) -> str:
     """Best-effort to get a row's division/zone string."""
+    # Prefer a previously resolved division if present
+    if '_division_resolved' in row and row['_division_resolved']:
+        return str(row['_division_resolved'])
     return str(
         row.get('zone')
         or row.get('division')
@@ -352,6 +355,23 @@ def view_sheet(table_name):
                         ext_columns[prefix] = namespaced_cols
                         # Also extend columns so template logic can include them if needed (treated as editable side)
                         columns.extend(namespaced_cols)
+                # After merging ext rows, resolve division for AUS if not present in base
+                try:
+                    for s in schools_list:
+                        base_div = (s.get('zone') or s.get('division') or s.get('divison') or '').strip()
+                        if base_div:
+                            s['_division_resolved'] = base_div
+                            continue
+                        # Try from any related section
+                        for p in ['asset','cares','mm','me','ms']:
+                            cand = (
+                                s.get(f'{p}__zone') or s.get(f'{p}__division') or s.get(f'{p}__divison')
+                            )
+                            if cand:
+                                s['_division_resolved'] = str(cand).strip()
+                                break
+                except Exception:
+                    pass
         except Exception as merge_err:
             try:
                 app.logger.warning(f"AUS merge columns skipped: {merge_err}")
