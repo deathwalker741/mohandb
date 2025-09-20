@@ -85,6 +85,14 @@ def to_param_key(name: str) -> str:
         safe = f"c_{safe}"
     return safe
 
+def is_super_editor(user) -> bool:
+    """Return True if this user can edit all columns (overrides fixed columns).
+
+    Currently, this is restricted to Mohan's EI email.
+    """
+    email = str(user.get('email', '')).strip().lower()
+    return email == 'mohan.kumar@ei.study'
+
 # Common key variants for School Number across sheets
 SCHOOL_NO_KEYS = [
     'school_no', 'school_number', 'schoolcode', 'school_code',
@@ -375,6 +383,9 @@ def edit_school(table_name, school_id):
 
     config = SHEET_CONFIGS[table_name]
     fixed_cols = config['fixed_columns']
+    # Super editor can edit all columns (no fixed columns)
+    if is_super_editor(session['user']):
+        fixed_cols = 0
     columns = list(school.keys()) if school else []
     
     return render_template('edit_school.html',
@@ -517,6 +528,9 @@ def update_school(table_name, school_id):
 
     config = SHEET_CONFIGS[table_name]
     fixed_col_count = config['fixed_columns']
+    # Super editor can edit all columns (except id)
+    if is_super_editor(session['user']):
+        fixed_col_count = 0
     
     # We skip the 'id' column, so we use index + 1
     editable_columns = [col for idx, col in enumerate(columns) if idx + 1 > fixed_col_count and col != 'id']

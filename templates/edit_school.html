@@ -79,8 +79,12 @@
                 <div class="mb-3">
                     <h6>Column Types:</h6>
                     <ul class="list-unstyled">
+                        {% if fixed_col_count > 0 %}
                         <li><i class="fas fa-lock text-warning me-2"></i>Fixed ({{ fixed_col_count }})</li>
                         <li><i class="fas fa-edit text-success me-2"></i>Editable ({{ columns|length - fixed_col_count }})</li>
+                        {% else %}
+                        <li><i class="fas fa-edit text-success me-2"></i>Editable (All columns)</li>
+                        {% endif %}
                     </ul>
                 </div>
                 
@@ -99,7 +103,11 @@
                 <div class="alert alert-info">
                     <small>
                         <i class="fas fa-lightbulb me-1"></i>
+                        {% if fixed_col_count > 0 %}
                         Only editable columns can be modified. Fixed columns are system-managed.
+                        {% else %}
+                        You have full access to edit all columns (except id).
+                        {% endif %}
                     </small>
                 </div>
             </div>
