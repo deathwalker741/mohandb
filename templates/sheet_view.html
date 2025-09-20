@@ -50,6 +50,16 @@
         </h5>
     </div>
     <div class="card-body p-0">
+        <div class="p-3 border-bottom bg-light">
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" id="toggleFixed">
+                <label class="form-check-label" for="toggleFixed">Show uneditable (fixed) columns</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" id="toggleEditable">
+                <label class="form-check-label" for="toggleEditable">Show editable columns</label>
+            </div>
+        </div>
         {% if schools %}
         {% set fixed_count = (fixed_col_count | default(0)) | int %}
         <div class="table-responsive">
@@ -109,13 +119,28 @@
     </div>
 </div>
 
-{# Render list of editable columns if any (after fixed) #}
-{% if columns and (columns|length - fixed_col_count) > 0 %}
-<div class="card mt-4">
+{# Hidden sections for columns; shown when checkboxes are ticked #}
+{% if columns and fixed_count > 0 %}
+<div id="fixedColumnsCard" class="card mt-4 d-none">
     <div class="card-header">
-        <h6 class="mb-0">
-            <i class="fas fa-list me-2"></i>Editable Columns
-        </h6>
+        <h6 class="mb-0"><i class="fas fa-lock me-2 text-warning"></i>Uneditable (Fixed) Columns</h6>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            {% for column in columns[:fixed_count] %}
+            <div class="col-md-4 col-lg-3 mb-2">
+                <span class="badge bg-secondary">{{ column }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    </div>
+{% endif %}
+
+{% if columns and (columns|length - fixed_count) > 0 %}
+<div id="editableColumnsCard" class="card mt-4 d-none">
+    <div class="card-header">
+        <h6 class="mb-0"><i class="fas fa-edit me-2 text-success"></i>Editable Columns</h6>
     </div>
     <div class="card-body">
         <div class="row">
@@ -128,4 +153,24 @@
     </div>
 </div>
 {% endif %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const toggleFixed = document.getElementById('toggleFixed');
+  const toggleEditable = document.getElementById('toggleEditable');
+  const fixedCard = document.getElementById('fixedColumnsCard');
+  const editableCard = document.getElementById('editableColumnsCard');
+
+  if (toggleFixed && fixedCard) {
+    toggleFixed.addEventListener('change', () => {
+      fixedCard.classList.toggle('d-none', !toggleFixed.checked);
+    });
+  }
+  if (toggleEditable && editableCard) {
+    toggleEditable.addEventListener('change', () => {
+      editableCard.classList.toggle('d-none', !toggleEditable.checked);
+    });
+  }
+});
+</script>
 {% endblock %}
