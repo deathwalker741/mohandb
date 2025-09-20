@@ -3,37 +3,58 @@
 {% block title %}Login - School Management Dashboard{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-6 col-lg-4">
-        <div class="card">
-            <div class="card-body p-5">
-                <div class="text-center mb-4">
-                    <i class="fas fa-graduation-cap fa-3x text-primary mb-3"></i>
-                    <h3 class="card-title">School Dashboard</h3>
-                    <p class="text-muted">Please login to continue</p>
-                </div>
-                
-                <form method="POST">
+<div class="row justify-content-center g-4">
+    <div class="col-12 text-center mb-2">
+        <i class="fas fa-graduation-cap fa-3x text-primary mb-2"></i>
+        <h3 class="card-title">School Dashboard</h3>
+        <p class="text-muted">Choose a login method to continue</p>
+    </div>
+
+    <!-- Left: EI Staff Login (email only) -->
+    <div class="col-md-5 col-lg-4">
+        <div class="card h-100">
+            <div class="card-body p-4">
+                <h5 class="mb-3"><i class="fas fa-building me-2 text-primary"></i>EI Staff Login</h5>
+                <p class="text-muted small">Use your @ei.study email for full access (all divisions)</p>
+                <form method="POST" action="{{ url_for('login_ei') }}">
+                    <div class="mb-3">
+                        <label for="ei_email" class="form-label">
+                            <i class="fas fa-envelope me-2"></i>Email Address (@ei.study)
+                        </label>
+                        <input type="email" class="form-control" id="ei_email" name="email" placeholder="your.name@ei.study" required>
+                    </div>
+                    <button type="submit" class="btn btn-outline-primary w-100">
+                        <i class="fas fa-unlock-alt me-2"></i>Login with EI Email
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right: Existing user login (email + password) -->
+    <div class="col-md-5 col-lg-4">
+        <div class="card h-100">
+            <div class="card-body p-4">
+                <h5 class="mb-3"><i class="fas fa-user-lock me-2 text-secondary"></i>Division User Login</h5>
+                <p class="text-muted small">Login with assigned email and password (division-scoped access)</p>
+                <form method="POST" action="{{ url_for('login') }}">
                     <div class="mb-3">
                         <label for="email" class="form-label">
                             <i class="fas fa-envelope me-2"></i>Email Address
                         </label>
                         <input type="email" class="form-control" id="email" name="email" required>
                     </div>
-                    
                     <div class="mb-4">
                         <label for="password" class="form-label">
                             <i class="fas fa-lock me-2"></i>Password
                         </label>
                         <input type="password" class="form-control" id="password" name="password" required>
                     </div>
-                    
                     <button type="submit" class="btn btn-primary w-100">
                         <i class="fas fa-sign-in-alt me-2"></i>Login
                     </button>
                 </form>
-                
-                <div class="text-center mt-4">
+                <div class="text-center mt-3">
                     <small class="text-muted">
                         <i class="fas fa-info-circle me-1"></i>
                         Use your assigned email and 6-digit password

@@ -135,6 +135,26 @@ def login():
     
     return render_template('login.html')
 
+@app.route('/login-ei', methods=['POST'])
+def login_ei():
+    """EI email-only login; any @ei.study email gets All Divisions access."""
+    email = request.form.get('email', '').strip()
+    if not email:
+        flash('Email is required for EI login.', 'error')
+        return redirect(url_for('login'))
+    if not email.lower().endswith('@ei.study'):
+        flash('Only @ei.study emails are allowed for EI login.', 'error')
+        return redirect(url_for('login'))
+
+    # Grant full access user session
+    session['user'] = {
+        'name': email.split('@')[0].replace('.', ' ').title(),
+        'email': email,
+        'division': 'All Divisions'
+    }
+    flash('Logged in with EI access (All Divisions).', 'success')
+    return redirect(url_for('index'))
+
 @app.route('/logout')
 def logout():
     """Logout user"""
