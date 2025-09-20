@@ -1,17 +1,28 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 import json
 import os
-from excel_parser import ExcelDataParser
-from werkzeug.security import check_password_hash, generate_password_hash
+from sqlalchemy import create_engine, text
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key')
 
-# Global variables
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-excel_file_path = os.environ.get('EXCEL_PATH', os.path.join(BASE_DIR, 'data', 'Tracker 2025-26.xlsx'))
-parser = None
-schools_data = {}
+# --- Database Connection ---
+# Railway provides this automatically as an environment variable
+DATABASE_URL = os.environ.get('DATABASE_URL')
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL is not set!")
+engine = create_engine(DATABASE_URL)
+
+# --- Define Sheet to Table Mapping and Configurations ---
+SHEET_CONFIGS = {
+    'asset_schools': {'name': 'ASSET Schools', 'fixed_columns': 8},
+    'cares_schools': {'name': 'CARES Schools', 'fixed_columns': 10},
+    'mindspark_math_schools': {'name': 'Mindspark Math Schools', 'fixed_columns': 6},
+    'mindspark_english_schools': {'name': 'Mindspark English Schools', 'fixed_columns': 6},
+    'mindspark_science_schools': {'name': 'Mindspark Science Schools', 'fixed_columns': 6},
+    'all_unique_schools': {'name': 'All Unique Schools', 'fixed_columns': 6},
+    'summary_data': {'name': 'Summary Data', 'fixed_columns': -1}
+}
 
 def load_users():
     """Load users from JSON file"""
@@ -20,17 +31,6 @@ def load_users():
             return json.load(f)
     except FileNotFoundError:
         return []
-
-def load_schools_data():
-    """Load schools data from Excel file"""
-    global parser, schools_data
-    try:
-        parser = ExcelDataParser(excel_file_path)
-        schools_data = parser.parse_excel()
-        return True
-    except Exception as e:
-        print(f"Error loading schools data: {str(e)}")
-        return False
 
 def authenticate_user(email, password):
     """Authenticate user with email and password"""
@@ -44,33 +44,16 @@ def can_edit_school(user, school_data):
     """Check if user can edit a specific school based on division"""
     if user['division'] == 'All Divisions':
         return True
-    
-    # Check if school belongs to user's division
-    # Look for Zone column (which is the actual column name in the data)
-    school_zone = school_data.get('Zone', '')
-    user_division = user['division']
-    
-    # Debug print to see what's happening
-    print(f"User: {user['name']} ({user_division}) | School Zone: {school_zone} | Can Edit: {school_zone == user_division}")
-    
-    return school_zone == user_division
+    return school_data.get('zone', '') == user['division']
 
 @app.route('/')
 def index():
-    """Main dashboard page"""
     if 'user' not in session:
         return redirect(url_for('login'))
-    
-    if not schools_data:
-        load_schools_data()
-    
-    return render_template('dashboard.html', 
-                         sheets=schools_data, 
-                         user=session['user'])
+    return render_template('dashboard.html', sheets=SHEET_CONFIGS, user=session['user'])
 
 @app.route('/health')
 def health_check():
-    """Unauthenticated healthcheck endpoint"""
     return jsonify({"status": "healthy"}), 200
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -97,134 +80,118 @@ def logout():
     flash('You have been logged out.', 'info')
     return redirect(url_for('login'))
 
-@app.route('/sheet/<sheet_name>')
-def view_sheet(sheet_name):
-    """View specific sheet data"""
+
+@app.route('/sheet/<table_name>')
+def view_sheet(table_name):
     if 'user' not in session:
         return redirect(url_for('login'))
-    
-    if sheet_name not in schools_data:
+    if table_name not in SHEET_CONFIGS:
         flash('Sheet not found!', 'error')
         return redirect(url_for('index'))
+
+    with engine.connect() as connection:
+        query = text(f"SELECT * FROM {table_name} ORDER BY id;")
+        result = connection.execute(query).mappings().all()
+        columns = result[0].keys() if result else []
     
-    sheet_data = schools_data[sheet_name]
     user = session['user']
-    
-    # Show all schools, but mark which ones can be edited
-    filtered_schools = []
-    for school in sheet_data['data']:
-        # Add all schools for viewing, but mark edit permissions
+    # Create a mutable copy of each school row
+    schools_list = [dict(school) for school in result]
+    for school in schools_list:
         school['can_edit'] = can_edit_school(user, school)
-        filtered_schools.append(school)
+        
+    config = SHEET_CONFIGS[table_name]
+    fixed_cols = config['fixed_columns']
     
-    return render_template('sheet_view.html', 
-                         sheet_name=sheet_name,
-                         sheet_data=sheet_data,
-                         schools=filtered_schools,
+    return render_template('sheet_view.html',
+                         sheet_name=config['name'],
+                         table_name=table_name,
+                         schools=schools_list,
+                         columns=columns,
+                         fixed_col_count=fixed_cols,
                          user=user)
 
-@app.route('/edit/<sheet_name>/<int:school_id>')
-def edit_school(sheet_name, school_id):
-    """Edit school data"""
+@app.route('/edit/<table_name>/<int:school_id>')
+def edit_school(table_name, school_id):
     if 'user' not in session:
         return redirect(url_for('login'))
-    
-    if sheet_name not in schools_data:
+    if table_name not in SHEET_CONFIGS:
         flash('Sheet not found!', 'error')
-        return redirect(url_for('index'))
-    
-    sheet_data = schools_data[sheet_name]
-    user = session['user']
-    
-    if school_id >= len(sheet_data['data']):
+        return redirect(url_for('view_sheet', table_name=table_name))
+
+    with engine.connect() as connection:
+        query = text(f"SELECT * FROM {table_name} WHERE id = :school_id")
+        school = connection.execute(query, {'school_id': school_id}).mappings().first()
+
+    if not school:
         flash('School not found!', 'error')
-        return redirect(url_for('view_sheet', sheet_name=sheet_name))
+        return redirect(url_for('view_sheet', table_name=table_name))
     
-    school = sheet_data['data'][school_id]
-    
-    # Check if user can edit this school
-    if not can_edit_school(user, school):
+    if not can_edit_school(session['user'], school):
         flash('You do not have permission to edit this school!', 'error')
-        return redirect(url_for('view_sheet', sheet_name=sheet_name))
+        return redirect(url_for('view_sheet', table_name=table_name))
+
+    config = SHEET_CONFIGS[table_name]
+    fixed_cols = config['fixed_columns']
+    columns = school.keys()
     
     return render_template('edit_school.html',
-                         sheet_name=sheet_name,
-                         sheet_data=sheet_data,
+                         sheet_name=config['name'],
+                         table_name=table_name,
                          school=school,
                          school_id=school_id,
-                         user=user)
+                         columns=columns,
+                         fixed_col_count=fixed_cols,
+                         user=session['user'])
 
-@app.route('/update/<sheet_name>/<int:school_id>', methods=['POST'])
-def update_school(sheet_name, school_id):
-    """Update school data"""
+@app.route('/update/<table_name>/<int:school_id>', methods=['POST'])
+def update_school(table_name, school_id):
     if 'user' not in session:
-        return redirect(url_for('login'))
+        return jsonify({'success': False, 'message': 'Unauthorized'}), 401
     
-    if sheet_name not in schools_data:
-        return jsonify({'success': False, 'message': 'Sheet not found'})
-    
-    sheet_data = schools_data[sheet_name]
-    user = session['user']
-    
-    if school_id >= len(sheet_data['data']):
+    # Get all column names for the table to determine which are editable
+    with engine.connect() as connection:
+        # Use a placeholder that is unlikely to exist to get columns without fetching data
+        query = text(f"SELECT * FROM {table_name} WHERE 1=0;")
+        columns = connection.execute(query).keys()
+        school_query = text(f"SELECT * FROM {table_name} WHERE id = :school_id")
+        school = connection.execute(school_query, {'school_id': school_id}).mappings().first()
+
+    if not school:
         return jsonify({'success': False, 'message': 'School not found'})
-    
-    school = sheet_data['data'][school_id]
-    
-    # Check if user can edit this school
-    if not can_edit_school(user, school):
+    if not can_edit_school(session['user'], school):
         return jsonify({'success': False, 'message': 'Permission denied'})
-    
-    # Get updated data (only editable columns)
-    updated_data = {}
-    for column in sheet_data['editable_columns']:
-        if column in request.form:
-            updated_data[column] = request.form[column]
-    
-    # Update the data
-    if parser and parser.update_school_data(sheet_name, school_id, updated_data):
-        # Reload data to reflect changes
-        load_schools_data()
-        return jsonify({'success': True, 'message': 'School data updated successfully'})
-    else:
-        return jsonify({'success': False, 'message': 'Failed to update school data'})
 
-@app.route('/api/schools/<sheet_name>')
-def api_schools(sheet_name):
-    """API endpoint to get schools data"""
-    if 'user' not in session:
-        return jsonify({'error': 'Unauthorized'}), 401
+    config = SHEET_CONFIGS[table_name]
+    fixed_col_count = config['fixed_columns']
     
-    if sheet_name not in schools_data:
-        return jsonify({'error': 'Sheet not found'}), 404
+    # We skip the 'id' column, so we use index + 1
+    editable_columns = [col for idx, col in enumerate(columns) if idx + 1 > fixed_col_count and col != 'id']
+
+    # Build the SQL UPDATE statement securely
+    set_clauses = []
+    values_to_update = {}
+    for column in editable_columns:
+        if column in request.form:
+            set_clauses.append(f"{column} = :{column}")
+            values_to_update[column] = request.form[column]
     
-    sheet_data = schools_data[sheet_name]
-    user = session['user']
-    
-    # Show all schools, but mark which ones can be edited
-    filtered_schools = []
-    for school in sheet_data['data']:
-        # Add all schools for viewing, but mark edit permissions
-        school['can_edit'] = can_edit_school(user, school)
-        filtered_schools.append(school)
-    
-    return jsonify({
-        'sheet_name': sheet_data['name'],
-        'columns': sheet_data['columns'],
-        'fixed_columns': sheet_data['fixed_columns'],
-        'editable_columns': sheet_data['editable_columns'],
-        'schools': filtered_schools
-    })
+    if not set_clauses:
+        return jsonify({'success': False, 'message': 'No data to update'})
+
+    values_to_update['school_id'] = school_id
+    update_statement = f"UPDATE {table_name} SET {', '.join(set_clauses)} WHERE id = :school_id"
+
+    try:
+        with engine.connect() as connection:
+            trans = connection.begin()
+            connection.execute(text(update_statement), values_to_update)
+            trans.commit()
+        return jsonify({'success': True, 'message': 'School data updated successfully'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Database error: {e}'})
 
 if __name__ == '__main__':
-    # Load schools data on startup
-    if load_schools_data():
-        print("Schools data loaded successfully!")
-    else:
-        print("Failed to load schools data!")
-    
-    # Get port from environment variable (for production) or use 5000 for local
     port = int(os.environ.get('PORT', 5000))
     debug_mode = os.environ.get('FLASK_ENV') != 'production'
-    
     app.run(debug=debug_mode, host='0.0.0.0', port=port)
