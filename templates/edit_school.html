@@ -8,7 +8,7 @@
         <h2><i class="fas fa-edit me-2"></i>Edit School</h2>
         <p class="text-muted mb-0">{{ sheet_data.name }} - {{ school.get('School Name', school.get('Name', 'N/A')) }}</p>
     </div>
-    <a href="{{ url_for('view_sheet', sheet_name=sheet_name) }}" class="btn btn-outline-secondary">
+    <a href="{{ url_for('view_sheet', table_name=table_name) }}" class="btn btn-outline-secondary">
         <i class="fas fa-arrow-left me-2"></i>Back to List
     </a>
 </div>
@@ -197,7 +197,7 @@ document.getElementById('editForm').addEventListener('submit', function(e) {
     submitBtn.disabled = true;
     
     // Send update request
-    fetch(`{{ url_for('update_school', sheet_name=sheet_name, school_id=school_id) }}`, {
+    fetch(`{{ url_for('update_school', table_name=table_name, school_id=school_id) }}`, {
         method: 'POST',
         body: formData
     })

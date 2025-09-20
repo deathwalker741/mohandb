@@ -255,18 +255,37 @@ def edit_school(table_name, school_id):
         flash('You do not have permission to edit this school!', 'error')
         return redirect(url_for('view_sheet', table_name=table_name))
 
+    # Build sheet metadata and column sets
     config = SHEET_CONFIGS[table_name]
-    fixed_cols = config['fixed_columns']
-    columns = school.keys()
-    
-    return render_template('edit_school.html',
-                         sheet_name=config['name'],
-                         table_name=table_name,
-                         school=school,
-                         school_id=school_id,
-                         columns=columns,
-                         fixed_col_count=fixed_cols,
-                         user=session['user'])
+    fixed_cols = int(config.get('fixed_columns', 0))
+
+    # Reflect full column order for the table
+    metadata = MetaData()
+    table = Table(table_name, metadata, autoload_with=engine)
+    all_columns = [c.name for c in table.columns]
+
+    if fixed_cols < 0:
+        fixed_column_names = all_columns[:]  # all read-only
+        editable_columns = []
+    else:
+        fixed_column_names = [c for idx, c in enumerate(all_columns) if (idx + 1) <= fixed_cols]
+        editable_columns = [c for idx, c in enumerate(all_columns) if (idx + 1) > fixed_cols and c != 'id']
+
+    sheet_data = {
+        'name': config['name'],
+        'fixed_columns': fixed_column_names,
+        'editable_columns': editable_columns,
+    }
+
+    return render_template(
+        'edit_school.html',
+        sheet_data=sheet_data,
+        table_name=table_name,
+        school=school,
+        school_id=school_id,
+        columns=all_columns,
+        user=session['user']
+    )
 
 @app.route('/update/<table_name>/<int:school_id>', methods=['POST'])
 def update_school(table_name, school_id):
