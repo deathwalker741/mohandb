@@ -1,6 +1,3 @@
 # Override Nixpacks defaults to install required system packages
 [phases.setup]
-nixPkgs = [
-  "postgresql_16",
-  "gcc"
-]
+nixPkgs = ["python311", "postgresql_16", "gcc"]
