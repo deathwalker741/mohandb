@@ -11,6 +11,7 @@ from sqlalchemy import (
     or_,
     asc,
     desc,
+    func,
 )
 from sqlalchemy.types import String, Text
 
@@ -66,7 +67,42 @@ def can_edit_school(user, school_data):
 def index():
     if 'user' not in session:
         return redirect(url_for('login'))
-    return render_template('dashboard.html', sheets=SHEET_CONFIGS, user=session['user'])
+    # Build enriched sheet metadata for dashboard cards
+    metadata = MetaData()
+    sheets_info = {}
+    for table_name, cfg in SHEET_CONFIGS.items():
+        name = cfg.get('name', table_name)
+        fixed_cols = int(cfg.get('fixed_columns', 0))
+        columns = []
+        total_rows = 0
+        editable_columns = []
+        try:
+            table = Table(table_name, metadata, autoload_with=engine)
+            columns = [c.name for c in table.columns]
+            with engine.connect() as conn:
+                total_rows = conn.execute(select(func.count()).select_from(table)).scalar() or 0
+            if fixed_cols >= 0:
+                editable_columns = [
+                    c for idx, c in enumerate(columns)
+                    if (idx + 1) > fixed_cols and c != 'id'
+                ]
+            else:
+                editable_columns = []
+        except Exception:
+            # If table not found or any error, fall back to minimal info
+            columns = []
+            total_rows = 0
+            editable_columns = []
+
+        sheets_info[table_name] = {
+            'name': name,
+            'fixed_columns': fixed_cols,
+            'columns': columns,
+            'editable_columns': editable_columns,
+            'total_rows': total_rows,
+        }
+
+    return render_template('dashboard.html', sheets=sheets_info, user=session['user'])
 
 @app.route('/health')
 def health_check():
