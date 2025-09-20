@@ -22,6 +22,8 @@ SHEET_CONFIGS = {
     'mindspark_english_schools': {'name': 'Mindspark English Schools', 'fixed_columns': 6},
     'mindspark_science_schools': {'name': 'Mindspark Science Schools', 'fixed_columns': 6},
     'all_unique_schools': {'name': 'All Unique Schools', 'fixed_columns': 6},
+    # Virtual, zone-scoped view for division users only (no backing table)
+    'all_unique_schools_zone': {'name': 'All Unique Schools (by Zone)', 'fixed_columns': 0},
     'summary_data': {'name': 'Summary Data', 'fixed_columns': -1}
 }
 
@@ -52,16 +54,6 @@ def can_edit_school(user, school_data):
 
     Be tolerant to different column names that may come from Excel normalization
     (e.g., 'zone' vs 'division').
-        # Prepare debug info
-        debug_info = {
-            'table': table_name,
-            'total_before_filter': len(schools_list),
-            'resolved_division_counts': {'set': 0, 'empty': 0},
-            'post_filter_count': None,
-            'user_division': str(user.get('division','')),
-            'is_ei': bool(user.get('is_ei')),
-            'notes': []
-        }
     """
     email = str(user.get('email', '')).strip().lower()
     # Only this EI email has edit access globally
@@ -176,7 +168,6 @@ def normalize_school_no(val):
     s = str(val).strip()
     if not s or s.lower() in ('nan', 'none', 'null'):
         return None
-        debug_info['post_filter_count'] = len(schools_list)
     return s
 
 def find_school_no_column(columns):
@@ -190,7 +181,6 @@ def find_school_no_column(columns):
 def get_school_no_from_row(row: dict):
     """Return school number value from a row dict using known keys."""
     for key in SCHOOL_NO_KEYS:
-                             debug_info=debug_info)
         if key in row and row[key]:
             return normalize_school_no(row[key])
     return None
@@ -218,9 +208,35 @@ def index():
     # Build dashboard metadata with actual column lists per table (robust)
     dashboard_sheets = {}
     with engine.connect() as conn:
+        user = session['user']
         for table_name, cfg in SHEET_CONFIGS.items():
             # Hide Summary Data from dashboard cards
             if table_name == 'summary_data':
+                continue
+            # Hide original AUS for division users (non-EI) and show virtual zone AUS instead
+            if table_name == 'all_unique_schools' and not is_ei_user(user):
+                # Skip the base AUS card entirely for division users (unless Mohan)
+                email = str(user.get('email','')).strip().lower()
+                if email != 'mohan.kumar@ei.study':
+                    continue
+            if table_name == 'all_unique_schools_zone':
+                # Only show this virtual card for division users (non-EI and non-Mohan)
+                if is_ei_user(user) or str(user.get('email','')).strip().lower() == 'mohan.kumar@ei.study':
+                    continue
+                # Provide a sensible set of columns for display purposes
+                columns = [
+                    'school_no', 'school_name', 'division_zone',
+                    'has_asset', 'has_cares', 'has_ms_math', 'has_ms_english', 'has_ms_science'
+                ]
+                fixed_count = 0
+                fixed_cols = []
+                editable_cols = columns
+                dashboard_sheets[table_name] = {
+                    'name': cfg.get('name', table_name),
+                    'fixed_count': fixed_count,
+                    'fixed_cols': fixed_cols,
+                    'editable_cols': editable_cols,
+                }
                 continue
             columns = fetch_columns(conn, table_name)
             raw_fixed = int(cfg.get('fixed_columns', 0))
@@ -295,6 +311,93 @@ def view_sheet(table_name):
     if table_name not in SHEET_CONFIGS:
         flash('Sheet not found!', 'error')
         return redirect(url_for('index'))
+
+    # Virtual: all_unique_schools_zone - compose zone-scoped view for division users
+    if table_name == 'all_unique_schools_zone':
+        user = session['user']
+        # Only for division users (non-EI) that are not Mohan
+        if is_ei_user(user) or str(user.get('email','')).strip().lower() == 'mohan.kumar@ei.study':
+            flash('This view is intended for division users.', 'info')
+            return redirect(url_for('index'))
+        user_div = str(user.get('division','')).strip()
+        if not user_div or user_div.lower() == 'all divisions':
+            flash('Your division is not set; cannot scope by zone.', 'error')
+            return redirect(url_for('index'))
+
+        schools_map = {}  # school_no -> row dict
+        def add_source(conn, table_name, label_key):
+            cols = fetch_columns(conn, table_name)
+            sno_col = find_school_no_column(cols)
+            name_col = None
+            # heuristic for school name columns
+            for cand in ['school_name', 'name', 'school', 'schoolname']:
+                if cand in {c.lower() for c in cols}:
+                    name_col = cand
+                    break
+            if not sno_col:
+                return
+            # Build a where clause to filter by division/zone using case-insensitive match on common columns
+            # We try zone, division, divison, and Division/Zone-like combined names
+            where_clauses = [
+                f"LOWER({sql_ident('zone')}) = :udiv",
+                f"LOWER({sql_ident('division')}) = :udiv",
+                f"LOWER({sql_ident('divison')}) = :udiv",
+                f"LOWER({sql_ident('Division/Zone')}) = :udiv",
+            ]
+            # Some tables may not have these columns; we will OR them but protect with COALESCE
+            predicate = " OR ".join([f"LOWER(COALESCE({clause.split(')')[0]})::text) = :udiv" if 'COALESCE' not in clause else clause for clause in where_clauses])
+            # Simpler approach: try each column existence and union results
+            rows = []
+            for col in ['zone','division','divison','Division/Zone']:
+                if col.lower() in {c.lower() for c in cols}:
+                    sql = text(
+                        f"SELECT * FROM {sql_ident(table_name)} WHERE LOWER({sql_ident(col)}) = :udiv"
+                    )
+                    rows += conn.execute(sql, {"udiv": user_div.lower()}).mappings().all()
+            # Build map
+            for r in rows:
+                r = dict(r)
+                sno = get_school_no_from_row({k.lower(): v for k, v in r.items()})
+                if not sno:
+                    continue
+                if sno not in schools_map:
+                    schools_map[sno] = {
+                        'school_no': sno,
+                        'school_name': r.get(name_col) if name_col else (r.get('school_name') or r.get('name') or r.get('school') or r.get('School Name')),
+                        'division_zone': user_div,
+                        'has_asset': False,
+                        'has_cares': False,
+                        'has_ms_math': False,
+                        'has_ms_english': False,
+                        'has_ms_science': False,
+                        'can_edit': can_edit_school(user, r),
+                        'edit_id': None,
+                    }
+                schools_map[sno][label_key] = True
+
+        with engine.connect() as conn:
+            add_source(conn, 'asset_schools', 'has_asset')
+            add_source(conn, 'cares_schools', 'has_cares')
+            add_source(conn, 'mindspark_math_schools', 'has_ms_math')
+            add_source(conn, 'mindspark_english_schools', 'has_ms_english')
+            add_source(conn, 'mindspark_science_schools', 'has_ms_science')
+
+        schools_list = list(schools_map.values())
+        columns = ['school_no', 'school_name', 'division_zone', 'has_asset', 'has_cares', 'has_ms_math', 'has_ms_english', 'has_ms_science']
+        ext_columns = {}  # not used here
+        allow_actions = True
+        config = SHEET_CONFIGS[table_name]
+        fixed_cols = config['fixed_columns']
+        user = session['user']
+        return render_template('sheet_view.html',
+                               sheet_name=config['name'],
+                               table_name=table_name,
+                               schools=schools_list,
+                               columns=columns,
+                               fixed_col_count=fixed_cols,
+                               user=user,
+                               allow_actions=allow_actions,
+                               ext_columns=ext_columns)
 
     with engine.connect() as connection:
         # Quote identifiers to be safe
@@ -494,6 +597,76 @@ def view_school_detail(table_name, school_no):
         return redirect(url_for('index'))
 
     config = SHEET_CONFIGS[table_name]
+    # Virtual detail: all_unique_schools_zone -> fetch from source tables (view-only)
+    if table_name == 'all_unique_schools_zone':
+        user = session['user']
+        if is_ei_user(user) or str(user.get('email','')).strip().lower() == 'mohan.kumar@ei.study':
+            flash('This view is intended for division users.', 'info')
+            return redirect(url_for('index'))
+        school = {
+            'school_no': school_no,
+            'division_zone': user.get('division',''),
+        }
+        ext_sections = {}
+        try:
+            with engine.connect() as conn:
+                # Helper: fetch a single row by school_no from a table
+                def fetch_one_by_sno(tname: str):
+                    cols = fetch_columns(conn, tname)
+                    sno_col = find_school_no_column(cols)
+                    if not sno_col:
+                        return {}
+                    rs = conn.execute(
+                        text(f"SELECT * FROM {sql_ident(tname)} WHERE {sql_ident(sno_col)}::text = :s LIMIT 1"),
+                        {"s": str(school_no)},
+                    ).mappings().first()
+                    return dict(rs) if rs else {}
+                # Compose sections like AUS detail but without dropping keys
+                ext_sections = {
+                    'asset': fetch_one_by_sno('asset_schools'),
+                    'cares': fetch_one_by_sno('cares_schools'),
+                    'mm': fetch_one_by_sno('mindspark_math_schools'),
+                    'me': fetch_one_by_sno('mindspark_english_schools'),
+                    'ms': fetch_one_by_sno('mindspark_science_schools'),
+                }
+                # Try to fill school_name from any source
+                for sec in ['asset','cares','mm','me','ms']:
+                    d = ext_sections.get(sec) or {}
+                    if 'school_name' in {k.lower() for k in d.keys()}:
+                        # find actual case key
+                        for k in d.keys():
+                            if k.lower() == 'school_name':
+                                school['school_name'] = d.get(k)
+                                break
+                        break
+        except Exception:
+            pass
+        # Gate by division/zone
+        if not is_ei_user(user):
+            if not matches_user_division(user, {'division_zone': user.get('division','')}):
+                flash('You do not have access to this school (different division/zone).', 'error')
+                return redirect(url_for('index'))
+        ext_labels = {
+            'current': 'Summary',
+            'asset': 'ASSET',
+            'cares': 'CARES',
+            'mm': 'MS Math',
+            'me': 'MS English',
+            'ms': 'MS Science',
+        }
+        return render_template(
+            'view_school.html',
+            sheet_name=config['name'],
+            table_name=table_name,
+            school=school,
+            columns=list(school.keys()),
+            fixed_col_count=0,
+            user=user,
+            can_edit_row=False,
+            edit_id=None,
+            ext_sections=ext_sections,
+            ext_labels=ext_labels,
+        )
     with engine.connect() as conn:
         cols = fetch_columns(conn, table_name)
         school_no_col = find_school_no_column(cols)
