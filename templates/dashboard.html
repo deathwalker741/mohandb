@@ -25,23 +25,43 @@
                     </div>
                 </div>
                 
-                <p class="card-text text-muted">
-                    {% set fixed_count = (sheet_data.fixed_columns | default(0)) | int %}
-                    {% if fixed_count > 0 %}
-                        {{ fixed_count }} fixed columns; remaining are editable
-                    {% elif fixed_count == 0 %}
-                        All columns are editable
-                    {% else %}
-                        Read-only sheet
-                    {% endif %}
-                </p>
-                
-                <div class="d-flex justify-content-between align-items-center">
+                <div class="mb-2 d-flex justify-content-between align-items-center">
                     <a href="{{ url_for('view_sheet', table_name=sheet_name) }}" 
                        class="btn btn-primary btn-sm">
                         <i class="fas fa-eye me-1"></i>View Data
                     </a>
-                    <span class="badge bg-secondary">{{ sheet_data.name }}</span>
+                    <span class="badge bg-secondary">Fixed: {{ sheet_data.fixed_count }}</span>
+                </div>
+
+                <div class="mb-2">
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" id="dash-fixed-{{ sheet_name }}" onchange="toggleDashSection('{{ sheet_name }}','fixed')">
+                        <label class="form-check-label" for="dash-fixed-{{ sheet_name }}">Show uneditable columns</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" id="dash-editable-{{ sheet_name }}" onchange="toggleDashSection('{{ sheet_name }}','editable')">
+                        <label class="form-check-label" for="dash-editable-{{ sheet_name }}">Show editable columns</label>
+                    </div>
+                </div>
+
+                <div id="dash-fixed-cols-{{ sheet_name }}" class="d-none mt-2">
+                    {% if sheet_data.fixed_cols and sheet_data.fixed_cols|length > 0 %}
+                        {% for c in sheet_data.fixed_cols %}
+                            <span class="badge bg-secondary me-1 mb-1">{{ c }}</span>
+                        {% endfor %}
+                    {% else %}
+                        <span class="text-muted">No fixed columns detected</span>
+                    {% endif %}
+                </div>
+
+                <div id="dash-editable-cols-{{ sheet_name }}" class="d-none mt-2">
+                    {% if sheet_data.editable_cols and sheet_data.editable_cols|length > 0 %}
+                        {% for c in sheet_data.editable_cols %}
+                            <span class="badge bg-success me-1 mb-1">{{ c }}</span>
+                        {% endfor %}
+                    {% else %}
+                        <span class="text-muted">No editable columns detected</span>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -83,4 +103,17 @@
         </div>
     </div>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+function toggleDashSection(name, which) {
+    const id = which === 'fixed' ? `dash-fixed-cols-${name}` : `dash-editable-cols-${name}`;
+    const cbId = which === 'fixed' ? `dash-fixed-${name}` : `dash-editable-${name}`;
+    const section = document.getElementById(id);
+    const cb = document.getElementById(cbId);
+    if (section && cb) {
+        section.classList.toggle('d-none', !cb.checked);
+    }
+}
+</script>
 {% endblock %}

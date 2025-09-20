@@ -75,7 +75,39 @@ def to_param_key(name: str) -> str:
 def index():
     if 'user' not in session:
         return redirect(url_for('login'))
-    return render_template('dashboard.html', sheets=SHEET_CONFIGS, user=session['user'])
+    # Build dashboard metadata with actual column lists per table
+    dashboard_sheets = {}
+    try:
+        with engine.connect() as connection:
+            for table_name, cfg in SHEET_CONFIGS.items():
+                try:
+                    cols_rs = connection.execute(text(f'SELECT * FROM {sql_ident(table_name)} LIMIT 1;'))
+                    columns = list(cols_rs.keys())
+                except Exception:
+                    columns = []
+
+                fixed_count = int(cfg.get('fixed_columns', 0))
+                fixed_cols = columns[:fixed_count] if columns else []
+                # editable columns = after fixed_count, excluding id
+                editable_cols = [c for i, c in enumerate(columns) if (i + 1) > fixed_count and c != 'id']
+
+                dashboard_sheets[table_name] = {
+                    'name': cfg.get('name', table_name),
+                    'fixed_count': fixed_count,
+                    'fixed_cols': fixed_cols,
+                    'editable_cols': editable_cols,
+                }
+    except Exception:
+        # Fallback to names only if DB metadata fetch fails
+        for table_name, cfg in SHEET_CONFIGS.items():
+            dashboard_sheets[table_name] = {
+                'name': cfg.get('name', table_name),
+                'fixed_count': int(cfg.get('fixed_columns', 0)),
+                'fixed_cols': [],
+                'editable_cols': [],
+            }
+
+    return render_template('dashboard.html', sheets=dashboard_sheets, user=session['user'])
 
 @app.route('/health')
 def health_check():
