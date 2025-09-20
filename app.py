@@ -91,6 +91,15 @@ SCHOOL_NO_KEYS = [
     'udise_code', 'udise', 'serial_no', 'sr_no', 's_no'
 ]
 
+def normalize_school_no(val):
+    """Return canonical string for school_no, or None if empty/invalid."""
+    if val is None:
+        return None
+    s = str(val).strip()
+    if not s or s.lower() in ('nan', 'none', 'null'):
+        return None
+    return s
+
 def find_school_no_column(columns):
     """Return the first matching school number column name present in columns."""
     colset = {str(c).lower() for c in columns}
@@ -103,7 +112,7 @@ def get_school_no_from_row(row: dict):
     """Return school number value from a row dict using known keys."""
     for key in SCHOOL_NO_KEYS:
         if key in row and row[key]:
-            return row[key]
+            return normalize_school_no(row[key])
     return None
 
 
@@ -231,13 +240,12 @@ def view_sheet(table_name):
                 aus_sno_col = find_school_no_column(aus_cols)
                 # Build list of school_no values present
                 aus_snos = []
+                seen = set()
                 for r in schools_list:
                     sno = get_school_no_from_row(r)
-                    if sno is not None:
+                    if sno is not None and sno not in seen:
                         aus_snos.append(sno)
-                # Deduplicate while preserving order
-                seen = set()
-                aus_snos = [x for x in aus_snos if not (x in seen or seen.add(x))]
+                        seen.add(sno)
 
                 def fetch_map_for_table(tname: str):
                     cols = fetch_columns(conn, tname)
@@ -250,16 +258,16 @@ def view_sheet(table_name):
                     for i, val in enumerate(aus_snos):
                         pname = f"v{i}"
                         param_names.append(f":{pname}")
-                        params[pname] = val
+                        params[pname] = str(val)
                     in_list = ", ".join(param_names)
                     sql = text(
-                        f"SELECT * FROM {sql_ident(tname)} WHERE {sql_ident(sno_col)} IN ({in_list})"
+                        f"SELECT * FROM {sql_ident(tname)} WHERE {sql_ident(sno_col)}::text IN ({in_list})"
                     )
                     rows = conn.execute(sql, params).mappings().all()
                     m = {}
                     for row in rows:
                         try:
-                            key = row.get(sno_col)
+                            key = normalize_school_no(row.get(sno_col))
                         except Exception:
                             key = None
                         if key is not None and key not in m:
@@ -396,7 +404,7 @@ def view_school_detail(table_name, school_no):
                 # Resolve school number value from the current row if possible
                 cols_here = list(school.keys())
                 sno_key_here = find_school_no_column(cols_here)
-                sno_val = school.get(sno_key_here) if sno_key_here else school_no
+                sno_val = normalize_school_no(school.get(sno_key_here) if sno_key_here else school_no)
 
                 def fetch_one_by_sno(tname: str):
                     cols = fetch_columns(conn, tname)
@@ -404,8 +412,8 @@ def view_school_detail(table_name, school_no):
                     if not sno_col:
                         return {}
                     rs = conn.execute(
-                        text(f"SELECT * FROM {sql_ident(tname)} WHERE {sql_ident(sno_col)} = :s LIMIT 1"),
-                        {"s": sno_val},
+                        text(f"SELECT * FROM {sql_ident(tname)} WHERE {sql_ident(sno_col)}::text = :s LIMIT 1"),
+                        {"s": str(sno_val) if sno_val is not None else None},
                     ).mappings().first()
                     if not rs:
                         return {}
