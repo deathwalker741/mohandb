@@ -26,9 +26,9 @@ SHEET_CONFIGS = {
 }
 
 # Tables that are view-only (no edits allowed)
+# Note: all_unique_schools is editable only by Mohan; not globally read-only.
 READ_ONLY_TABLES = {
     'summary_data',
-    'all_unique_schools',
 }
 
 def load_users():
@@ -227,7 +227,13 @@ def view_sheet(table_name):
     # Create a mutable copy of each school row
     schools_list = [dict(school) for school in result]
     for school in schools_list:
-        school['can_edit'] = can_edit_school(user, school)
+        # Default permission
+        can_edit = can_edit_school(user, school)
+        # Special-case: only Mohan can edit all_unique_schools
+        if table_name == 'all_unique_schools':
+            email = str(user.get('email','')).strip().lower()
+            can_edit = (email == 'mohan.kumar@ei.study')
+        school['can_edit'] = can_edit
         if not allow_actions:
             # Force no edit button on read-only sheets
             school['can_edit'] = False
@@ -312,7 +318,8 @@ def view_sheet(table_name):
                 pass
     # EI users can view all schools; division users see only their editable schools on editable sheets
     is_ei_user = bool(user.get('is_ei') or str(user.get('email','')).lower().endswith('@ei.study'))
-    if not is_ei_user and allow_actions:
+    # Division users only see editable rows on editable sheets, except for all_unique_schools which is view-all
+    if (not is_ei_user) and allow_actions and table_name != 'all_unique_schools':
         schools_list = [s for s in schools_list if s.get('can_edit')]
         
     config = SHEET_CONFIGS[table_name]
@@ -335,6 +342,13 @@ def edit_school(table_name, school_id):
     if table_name not in SHEET_CONFIGS:
         flash('Sheet not found!', 'error')
         return redirect(url_for('view_sheet', table_name=table_name))
+
+    # Special-case: only Mohan can edit All Unique Schools
+    if table_name == 'all_unique_schools':
+        email = str(session['user'].get('email', '')).strip().lower()
+        if email != 'mohan.kumar@ei.study':
+            flash('You do not have permission to edit this sheet.', 'error')
+            return redirect(url_for('view_sheet', table_name=table_name))
 
     with engine.connect() as connection:
         query = text(f"SELECT * FROM {sql_ident(table_name)} WHERE {sql_ident('id')} = :school_id")
@@ -387,7 +401,11 @@ def view_school_detail(table_name, school_no):
     school = dict(row)
     user = session['user']
     allow_actions = table_name not in READ_ONLY_TABLES
-    can_edit_row = bool(allow_actions and can_edit_school(user, school))
+    # Only Mohan can edit all_unique_schools
+    if table_name == 'all_unique_schools':
+        can_edit_row = bool(allow_actions and str(user.get('email','')).strip().lower() == 'mohan.kumar@ei.study')
+    else:
+        can_edit_row = bool(allow_actions and can_edit_school(user, school))
     # Provide an edit_id if convertible to int
     edit_id = None
     try:
@@ -466,6 +484,11 @@ def view_school_detail(table_name, school_no):
 def update_school(table_name, school_id):
     if 'user' not in session:
         return jsonify({'success': False, 'message': 'Unauthorized'}), 401
+    # Special-case: only Mohan can update All Unique Schools
+    if table_name == 'all_unique_schools':
+        email = str(session['user'].get('email', '')).strip().lower()
+        if email != 'mohan.kumar@ei.study':
+            return jsonify({'success': False, 'message': 'Permission denied'}), 403
     
     # Get all column names for the table to determine which are editable
     with engine.connect() as connection:
