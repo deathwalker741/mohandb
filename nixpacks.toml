@@ -1,8 +1,11 @@
-[phases.setup]
-# Extend default detected packages and add required ones.
-# Use generic 'postgresql' client instead of the invalid 'postgresql_16.dev'.
-# Add gcc and pkg-config for building some Python wheels if needed.
-nixPkgs = ['...', 'postgresql', 'gcc', 'pkg-config']
+# Nixpacks configuration to override detected system packages
+# Ensures psycopg2 can compile against libpq without using the non-existent postgresql_16.dev
 
-[start]
-cmd = 'gunicorn app:app'
+[phases.setup]
+# Pin exact nix packages available in nixpkgs
+nixPkgs = [
+  "python39",
+  "postgresql_16",
+  "gcc",
+  "pkg-config"
+]
