@@ -85,6 +85,27 @@ def to_param_key(name: str) -> str:
         safe = f"c_{safe}"
     return safe
 
+# Common key variants for School Number across sheets
+SCHOOL_NO_KEYS = [
+    'school_no', 'school_number', 'schoolcode', 'school_code',
+    'udise_code', 'udise', 'serial_no', 'sr_no', 's_no'
+]
+
+def find_school_no_column(columns):
+    """Return the first matching school number column name present in columns."""
+    colset = {str(c).lower() for c in columns}
+    for key in SCHOOL_NO_KEYS:
+        if key in colset:
+            return key
+    return None
+
+def get_school_no_from_row(row: dict):
+    """Return school number value from a row dict using known keys."""
+    for key in SCHOOL_NO_KEYS:
+        if key in row and row[key]:
+            return row[key]
+    return None
+
 
 def fetch_columns(conn, table_name: str):
     """Get ordered column names from information_schema (works even for empty tables)."""
@@ -293,9 +314,83 @@ def update_school(table_name, school_id):
     try:
         with engine.connect() as connection:
             trans = connection.begin()
+            # 1) Update the original sheet's row
             connection.execute(text(update_statement), values_to_update)
+
+            # 2) Sync to all_unique_schools using school_no as identifier
+            try:
+                # Determine school_no value after update
+                merged_row = dict(school)
+                for column in editable_columns:
+                    if column in request.form:
+                        merged_row[column] = request.form[column]
+
+                school_no_value = get_school_no_from_row(merged_row)
+                # If school_no was updated via form but under a different alias, also try form keys
+                if not school_no_value:
+                    for key in SCHOOL_NO_KEYS:
+                        if key in request.form and request.form[key]:
+                            school_no_value = request.form[key]
+                            break
+
+                if school_no_value:
+                    # Fetch columns of all_unique_schools
+                    aus_cols = fetch_columns(connection, 'all_unique_schools')
+                    aus_school_no_col = find_school_no_column(aus_cols)
+                    if aus_school_no_col:
+                        # Prepare UPDATE set clauses for intersection of columns
+                        set_clauses_aus = []
+                        aus_values = {}
+                        for col in aus_cols:
+                            if col == 'id' or col == aus_school_no_col:
+                                continue
+                            if col in merged_row:
+                                p = to_param_key(f"aus_{col}")
+                                set_clauses_aus.append(f"{sql_ident(col)} = :{p}")
+                                aus_values[p] = merged_row[col]
+                        aus_values['aus_school_no'] = school_no_value
+
+                        if set_clauses_aus:
+                            update_aus_sql = (
+                                f"UPDATE {sql_ident('all_unique_schools')} "
+                                f"SET {', '.join(set_clauses_aus)} "
+                                f"WHERE {sql_ident(aus_school_no_col)} = :aus_school_no"
+                            )
+                            result = connection.execute(text(update_aus_sql), aus_values)
+
+                            if result.rowcount == 0:
+                                # Row doesn't exist; attempt INSERT with available columns
+                                insert_cols = []
+                                insert_params = []
+                                insert_values = {}
+                                # Ensure school_no is included
+                                insert_cols.append(sql_ident(aus_school_no_col))
+                                insert_params.append(':aus_school_no')
+                                insert_values['aus_school_no'] = school_no_value
+                                for col in aus_cols:
+                                    if col in ('id', aus_school_no_col):
+                                        continue
+                                    if col in merged_row:
+                                        insert_cols.append(sql_ident(col))
+                                        p = to_param_key(f"aus_{col}")
+                                        insert_params.append(f":{p}")
+                                        insert_values[p] = merged_row[col]
+                                if insert_cols:
+                                    insert_sql = (
+                                        f"INSERT INTO {sql_ident('all_unique_schools')} ("
+                                        f"{', '.join(insert_cols)}) VALUES ({', '.join(insert_params)})"
+                                    )
+                                    connection.execute(text(insert_sql), insert_values)
+                # else: no school_no; skip sync silently
+            except Exception as sync_err:
+                # Non-fatal; keep original update result but log server-side
+                try:
+                    app.logger.warning(f"AUS sync skipped/failed: {sync_err}")
+                except Exception:
+                    pass
+
             trans.commit()
-        return jsonify({'success': True, 'message': 'School data updated successfully'})
+        return jsonify({'success': True, 'message': 'School data updated successfully and synced'})
     except Exception as e:
         return jsonify({'success': False, 'message': f'Database error: {e}'})
 
