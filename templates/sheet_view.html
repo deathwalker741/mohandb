@@ -50,8 +50,30 @@
         </h5>
     </div>
     <div class="card-body p-0">
+        {# Compute dynamic columns to display in table (exclude id and base columns already shown) #}
+        {% set cols = columns or [] %}
         {% set fixed_count = (fixed_col_count | default(0)) | int %}
-        {% set editable_count = (columns|length - fixed_count) if columns else 0 %}
+        {% set school_no_keys = ['school_no','school_number','schoolcode','school_code','udise_code','udise','serial_no','sr_no','s_no'] %}
+        {% set name_keys = ['school_name','name','school','schoolname'] %}
+        {% set div_keys = ['division','zone','divison'] %}
+        {% set school_no_col = (school_no_keys | select('in', cols) | list | first) %}
+        {% set name_col = (name_keys | select('in', cols) | list | first) %}
+        {% set div_col = (div_keys | select('in', cols) | list | first) %}
+        {% set base_exclude = [school_no_col, name_col, div_col, 'id'] | select('string') | list %}
+        {% set dyn_fixed_cols = [] %}
+        {% for c in cols[:fixed_count] %}
+          {% if c not in base_exclude %}
+            {% set _ = dyn_fixed_cols.append(c) %}
+          {% endif %}
+        {% endfor %}
+        {% set dyn_editable_cols = [] %}
+        {% for c in cols[fixed_count:] %}
+          {% if c not in base_exclude %}
+            {% set _ = dyn_editable_cols.append(c) %}
+          {% endif %}
+        {% endfor %}
+        {% set display_fixed_count = dyn_fixed_cols|length %}
+        {% set display_editable_count = dyn_editable_cols|length %}
         <div class="p-3 border-bottom bg-light d-flex align-items-center justify-content-between flex-wrap gap-2">
             <div>
                 <span class="text-muted small">Sheet: <strong>{{ sheet_name }}</strong></span>
@@ -59,11 +81,11 @@
             <div>
                 <div class="form-check form-check-inline">
                     <input class="form-check-input" type="checkbox" id="toggleFixed">
-                    <label class="form-check-label" for="toggleFixed">Show uneditable (fixed) columns ({{ fixed_count }})</label>
+                    <label class="form-check-label" for="toggleFixed">Show uneditable (fixed) columns ({{ display_fixed_count }})</label>
                 </div>
                 <div class="form-check form-check-inline">
                     <input class="form-check-input" type="checkbox" id="toggleEditable">
-                    <label class="form-check-label" for="toggleEditable">Show editable columns ({{ editable_count }})</label>
+                    <label class="form-check-label" for="toggleEditable">Show editable columns ({{ display_editable_count }})</label>
                 </div>
             </div>
         </div>
@@ -75,6 +97,14 @@
                         <th>School No</th>
                         <th>School Name</th>
                         <th>Division/Zone</th>
+                        {# Dynamic fixed columns #}
+                        {% for column in dyn_fixed_cols %}
+                        <th class="dyn-col fixed-col d-none" data-type="fixed" data-col="{{ column }}">{{ column.replace('_', ' ')|title }}</th>
+                        {% endfor %}
+                        {# Dynamic editable columns #}
+                        {% for column in dyn_editable_cols %}
+                        <th class="dyn-col editable-col d-none" data-type="editable" data-col="{{ column }}">{{ column.replace('_', ' ')|title }}</th>
+                        {% endfor %}
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -104,6 +134,18 @@
                                 {{ division or 'N/A' }}
                             </span>
                         </td>
+                        {# Render dynamic fixed columns values #}
+                        {% for column in dyn_fixed_cols %}
+                        <td class="dyn-col fixed-col d-none" data-type="fixed" data-col="{{ column }}">
+                            {{ school.get(column) if school.get(column) is not none and school.get(column) != '' else '—' }}
+                        </td>
+                        {% endfor %}
+                        {# Render dynamic editable columns values #}
+                        {% for column in dyn_editable_cols %}
+                        <td class="dyn-col editable-col d-none" data-type="editable" data-col="{{ column }}">
+                            {{ school.get(column) if school.get(column) is not none and school.get(column) != '' else '—' }}
+                        </td>
+                        {% endfor %}
                         <td>
                             <a href="{{ url_for('edit_school', table_name=table_name, school_id=school.id) }}" 
                                class="btn btn-primary btn-sm">
@@ -125,90 +167,62 @@
     </div>
      </div>
     <script>
-// Debug-friendly logging
-function svlog(...args) { try { console.log('[sheet_view]', ...args); } catch(_) {} }
-function sverr(...args) { try { console.error('[sheet_view]', ...args); } catch(_) {} }
+    // Debug-friendly logging
+    function svlog(...args) { try { console.log('[sheet_view]', ...args); } catch(_) {} }
+    function sverr(...args) { try { console.error('[sheet_view]', ...args); } catch(_) {} }
 
-document.addEventListener('DOMContentLoaded', function() {
-    const tableName = {{ table_name|tojson }};
-    const toggleFixed = document.getElementById('toggleFixed');
-    const toggleEditable = document.getElementById('toggleEditable');
-    const fixedCard = document.getElementById('fixedColumnsCard');
-    const editableCard = document.getElementById('editableColumnsCard');
-
-    if (!toggleFixed || !toggleEditable) sverr('checkbox elements missing');
-    if (!fixedCard || !editableCard) sverr('column cards missing');
-
-    const keyFixed = `sv_fixed_${tableName}`;
-    const keyEditable = `sv_editable_${tableName}`;
-
-    // Initialize from localStorage
-    try {
-        const savedFixed = localStorage.getItem(keyFixed);
-        const savedEditable = localStorage.getItem(keyEditable);
-        if (toggleFixed && savedFixed !== null) toggleFixed.checked = savedFixed === '1';
-        if (toggleEditable && savedEditable !== null) toggleEditable.checked = savedEditable === '1';
-    } catch (e) { sverr('localStorage read failed', e); }
-
-    // Apply initial visibility
-    if (fixedCard && toggleFixed) fixedCard.classList.toggle('d-none', !toggleFixed.checked);
-    if (editableCard && toggleEditable) editableCard.classList.toggle('d-none', !toggleEditable.checked);
-
-    // Wire up handlers with persistence
-    if (toggleFixed && fixedCard) {
-        toggleFixed.addEventListener('change', () => {
-            const show = !!toggleFixed.checked;
-            fixedCard.classList.toggle('d-none', !show);
-            try { localStorage.setItem(keyFixed, show ? '1' : '0'); } catch (e) { sverr('localStorage write fixed failed', e); }
-            svlog('toggle fixed', { tableName, show });
+    function applyColumnVisibility(which, show) {
+        const selector = which === 'fixed' ? '[data-type="fixed"]' : '[data-type="editable"]';
+        document.querySelectorAll(selector).forEach(el => {
+            el.classList.toggle('d-none', !show);
         });
     }
-    if (toggleEditable && editableCard) {
-        toggleEditable.addEventListener('change', () => {
-            const show = !!toggleEditable.checked;
-            editableCard.classList.toggle('d-none', !show);
-            try { localStorage.setItem(keyEditable, show ? '1' : '0'); } catch (e) { sverr('localStorage write editable failed', e); }
-            svlog('toggle editable', { tableName, show });
-        });
-    }
-});
 
-// Surface uncaught errors
-window.addEventListener('error', (e) => {
-    sverr('uncaught error', { message: e.message, error: e.error });
-});
-</script>
-<!-- Fixed (uneditable) columns section -->
-{% set fixed_count = (fixed_col_count | default(0)) | int %}
-{% set editable_count = (columns|length - fixed_count) if columns else 0 %}
-<div id="fixedColumnsCard" class="card d-none mt-3">
-    <div class="card-header">
-        <h6 class="mb-0"><i class="fas fa-lock me-2"></i>Uneditable (fixed) columns ({{ fixed_count }})</h6>
-    </div>
-    <div class="card-body">
-        <div class="row">
-            {% for column in columns[:fixed_count] %}
-            <div class="col-md-4 col-lg-3 mb-2">
-                <span class="badge bg-secondary">{{ column }}</span>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-</div>
+    document.addEventListener('DOMContentLoaded', function() {
+        const tableName = {{ table_name|tojson }};
+        const toggleFixed = document.getElementById('toggleFixed');
+        const toggleEditable = document.getElementById('toggleEditable');
 
-<!-- Editable columns section -->
-<div id="editableColumnsCard" class="card d-none mt-3">
-    <div class="card-header">
-        <h6 class="mb-0"><i class="fas fa-pen me-2"></i>Editable columns ({{ editable_count }})</h6>
-    </div>
-    <div class="card-body">
-        <div class="row">
-            {% for column in columns[fixed_count:] %}
-            <div class="col-md-4 col-lg-3 mb-2">
-                <span class="badge bg-success">{{ column }}</span>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-</div>
+        if (!toggleFixed || !toggleEditable) sverr('checkbox elements missing');
+
+        const keyFixed = `sv_fixed_${tableName}`;
+        const keyEditable = `sv_editable_${tableName}`;
+
+        // Initialize from localStorage
+        try {
+            const savedFixed = localStorage.getItem(keyFixed);
+            const savedEditable = localStorage.getItem(keyEditable);
+            if (toggleFixed && savedFixed !== null) toggleFixed.checked = savedFixed === '1';
+            if (toggleEditable && savedEditable !== null) toggleEditable.checked = savedEditable === '1';
+        } catch (e) { sverr('localStorage read failed', e); }
+
+        // Apply initial visibility to table columns
+        applyColumnVisibility('fixed', !!(toggleFixed && toggleFixed.checked));
+        applyColumnVisibility('editable', !!(toggleEditable && toggleEditable.checked));
+
+        // Wire up handlers with persistence
+        if (toggleFixed) {
+            toggleFixed.addEventListener('change', () => {
+                const show = !!toggleFixed.checked;
+                applyColumnVisibility('fixed', show);
+                try { localStorage.setItem(keyFixed, show ? '1' : '0'); } catch (e) { sverr('localStorage write fixed failed', e); }
+                svlog('toggle fixed', { tableName, show });
+            });
+        }
+        if (toggleEditable) {
+            toggleEditable.addEventListener('change', () => {
+                const show = !!toggleEditable.checked;
+                applyColumnVisibility('editable', show);
+                try { localStorage.setItem(keyEditable, show ? '1' : '0'); } catch (e) { sverr('localStorage write editable failed', e); }
+                svlog('toggle editable', { tableName, show });
+            });
+        }
+    });
+
+    // Surface uncaught errors
+    window.addEventListener('error', (e) => {
+        sverr('uncaught error', { message: e.message, error: e.error });
+    });
+    </script>
+{# Cards removed; toggles now control actual table columns #}
 {% endblock %}
