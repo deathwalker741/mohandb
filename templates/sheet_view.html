@@ -260,6 +260,7 @@
         {% endif %}
     </div>
      </div>
+    <script id="sv-debug-json" type="application/json">{{ debug_info | tojson }}</script>
     <script>
     // Debug-friendly logging
     function svlog(...args) { try { console.log('[sheet_view]', ...args); } catch(_) {} }
@@ -301,6 +302,12 @@
     }
 
     document.addEventListener('DOMContentLoaded', function() {
+        try {
+            const el = document.getElementById('sv-debug-json');
+            const txt = el ? (el.textContent || el.innerText || '{}') : '{}';
+            window.__SV_DEBUG__ = JSON.parse(txt);
+            svlog('debug_info', window.__SV_DEBUG__);
+        } catch (e) { sverr('inject debug_info failed', e); }
     const tableName = "{{ table_name }}";
         const toggleFixed = document.getElementById('toggleFixed');
         const toggleEditable = document.getElementById('toggleEditable');
@@ -349,6 +356,16 @@
         // Apply initial search filter
         const input = document.getElementById('rowSearch');
         if (input) applyRowSearch(input.value);
+        try {
+            const total = (window.__SV_DEBUG__ && window.__SV_DEBUG__.total_before_filter) || 0;
+            const post = (window.__SV_DEBUG__ && window.__SV_DEBUG__.post_filter_count) || 0;
+            const division = (window.__SV_DEBUG__ && window.__SV_DEBUG__.user_division) || '';
+            const is_ei = !!(window.__SV_DEBUG__ && window.__SV_DEBUG__.is_ei);
+            svlog('rows', { total_before_filter: total, after_filter: post, division, is_ei });
+            if (window.__SV_DEBUG__ && window.__SV_DEBUG__.resolved_division_counts) {
+                svlog('division_resolved', window.__SV_DEBUG__.resolved_division_counts);
+            }
+        } catch (e) { sverr('initial debug log failed', e); }
 
         // Wire up handlers with persistence
         if (toggleFixed) {

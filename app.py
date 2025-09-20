@@ -52,6 +52,16 @@ def can_edit_school(user, school_data):
 
     Be tolerant to different column names that may come from Excel normalization
     (e.g., 'zone' vs 'division').
+        # Prepare debug info
+        debug_info = {
+            'table': table_name,
+            'total_before_filter': len(schools_list),
+            'resolved_division_counts': {'set': 0, 'empty': 0},
+            'post_filter_count': None,
+            'user_division': str(user.get('division','')),
+            'is_ei': bool(user.get('is_ei')),
+            'notes': []
+        }
     """
     email = str(user.get('email', '')).strip().lower()
     # Only this EI email has edit access globally
@@ -166,6 +176,7 @@ def normalize_school_no(val):
     s = str(val).strip()
     if not s or s.lower() in ('nan', 'none', 'null'):
         return None
+        debug_info['post_filter_count'] = len(schools_list)
     return s
 
 def find_school_no_column(columns):
@@ -179,6 +190,7 @@ def find_school_no_column(columns):
 def get_school_no_from_row(row: dict):
     """Return school number value from a row dict using known keys."""
     for key in SCHOOL_NO_KEYS:
+                             debug_info=debug_info)
         if key in row and row[key]:
             return normalize_school_no(row[key])
     return None
