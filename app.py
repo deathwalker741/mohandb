@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 import json
 import os
+import re
 from sqlalchemy import create_engine, text
 
 app = Flask(__name__)
@@ -56,6 +57,19 @@ def can_edit_school(user, school_data):
         or ''
     )
     return str(school_division).strip().lower() == str(user.get('division', '')).strip().lower()
+
+
+def sql_ident(name: str) -> str:
+    """Safely quote SQL identifiers for Postgres (handles dots, leading digits, etc.)."""
+    return '"' + str(name).replace('"', '""') + '"'
+
+
+def to_param_key(name: str) -> str:
+    """Make a safe SQLAlchemy bind parameter key from an arbitrary column name."""
+    safe = re.sub(r"[^0-9a-zA-Z_]", "_", str(name))
+    if re.match(r"^\d", safe):
+        safe = f"c_{safe}"
+    return safe
 
 @app.route('/')
 def index():
@@ -162,10 +176,10 @@ def update_school(table_name, school_id):
     
     # Get all column names for the table to determine which are editable
     with engine.connect() as connection:
-        # Use a placeholder that is unlikely to exist to get columns without fetching data
-        query = text(f"SELECT * FROM {table_name} WHERE 1=0;")
-        columns = connection.execute(query).keys()
-        school_query = text(f"SELECT * FROM {table_name} WHERE id = :school_id")
+        # Use a no-row result to get column names
+        query = text(f"SELECT * FROM {sql_ident(table_name)} WHERE 1=0;")
+        columns = list(connection.execute(query).keys())
+        school_query = text(f"SELECT * FROM {sql_ident(table_name)} WHERE {sql_ident('id')} = :school_id")
         school = connection.execute(school_query, {'school_id': school_id}).mappings().first()
 
     if not school:
@@ -184,14 +198,15 @@ def update_school(table_name, school_id):
     values_to_update = {}
     for column in editable_columns:
         if column in request.form:
-            set_clauses.append(f"{column} = :{column}")
-            values_to_update[column] = request.form[column]
+            param_key = to_param_key(column)
+            set_clauses.append(f"{sql_ident(column)} = :{param_key}")
+            values_to_update[param_key] = request.form[column]
     
     if not set_clauses:
         return jsonify({'success': False, 'message': 'No data to update'})
 
     values_to_update['school_id'] = school_id
-    update_statement = f"UPDATE {table_name} SET {', '.join(set_clauses)} WHERE id = :school_id"
+    update_statement = f"UPDATE {sql_ident(table_name)} SET {', '.join(set_clauses)} WHERE {sql_ident('id')} = :school_id"
 
     try:
         with engine.connect() as connection:
