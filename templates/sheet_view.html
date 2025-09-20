@@ -51,6 +51,7 @@
     </div>
     <div class="card-body p-0">
         {% if schools %}
+        {% set fixed_count = (fixed_col_count | default(0)) | int %}
         <div class="table-responsive">
             <table class="table table-hover mb-0">
                 <thead>
@@ -119,7 +120,7 @@
     </div>
     <div class="card-body">
         <div class="row">
-            {% for column in columns[fixed_col_count:] %}
+            {% for column in columns[fixed_count:] %}
             <div class="col-md-4 col-lg-3 mb-2">
                 <span class="badge bg-success">{{ column }}</span>
             </div>
