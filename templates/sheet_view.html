@@ -49,6 +49,30 @@
             <i class="fas fa-school me-2"></i>Schools List
         </h5>
     </div>
+    <!-- Search and Filter Bar -->
+    <div class="card-body pb-0">
+        <form class="row g-3 align-items-end" method="get">
+            <div class="col-md-4">
+                <label for="search" class="form-label mb-0">Search</label>
+                <input type="text" class="form-control" id="search" name="search" placeholder="Search by name or any field" value="{{ request.args.get('search', '') }}">
+            </div>
+            <div class="col-md-3">
+                <label for="division" class="form-label mb-0">Division/Zone</label>
+                <select class="form-select" id="division" name="division">
+                    <option value="">All</option>
+                    {% set divisions = schools | map(attribute='Division') | list %}
+                    {% for div in divisions|unique %}
+                        {% if div %}
+                        <option value="{{ div }}" {% if request.args.get('division') == div %}selected{% endif %}>{{ div }}</option>
+                        {% endif %}
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100"><i class="fas fa-search me-1"></i>Search</button>
+            </div>
+        </form>
+    </div>
     <div class="card-body p-0">
         {% if schools %}
         <div class="table-responsive">

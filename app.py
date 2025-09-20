@@ -89,20 +89,38 @@ def view_sheet(table_name):
         flash('Sheet not found!', 'error')
         return redirect(url_for('index'))
 
+    # Get search and filter parameters
+    search = request.args.get('search', '').strip()
+    division = request.args.get('division', '').strip()
+
+    # Build SQL query with filters
+    sql = f"SELECT * FROM {table_name}"
+    filters = []
+    params = {}
+    if search:
+        # Search in all text columns (school name, etc.)
+        filters.append("(" + " OR ".join([f"LOWER(CAST({col} AS TEXT)) LIKE :search" for col in ['name', 'school_name']]) + ")")
+        params['search'] = f"%{search.lower()}%"
+    if division:
+        filters.append("(division = :division OR zone = :division)")
+        params['division'] = division
+    if filters:
+        sql += " WHERE " + " AND ".join(filters)
+    sql += " ORDER BY id;"
+
     with engine.connect() as connection:
-        query = text(f"SELECT * FROM {table_name} ORDER BY id;")
-        result = connection.execute(query).mappings().all()
+        query = text(sql)
+        result = connection.execute(query, params).mappings().all()
         columns = result[0].keys() if result else []
-    
+
     user = session['user']
-    # Create a mutable copy of each school row
     schools_list = [dict(school) for school in result]
     for school in schools_list:
         school['can_edit'] = can_edit_school(user, school)
-        
+
     config = SHEET_CONFIGS[table_name]
     fixed_cols = config['fixed_columns']
-    
+
     return render_template('sheet_view.html',
                          sheet_name=config['name'],
                          table_name=table_name,
