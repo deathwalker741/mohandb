@@ -50,18 +50,24 @@
         </h5>
     </div>
     <div class="card-body p-0">
-        <div class="p-3 border-bottom bg-light">
-            <div class="form-check form-check-inline">
-                <input class="form-check-input" type="checkbox" id="toggleFixed">
-                <label class="form-check-label" for="toggleFixed">Show uneditable (fixed) columns</label>
+        {% set fixed_count = (fixed_col_count | default(0)) | int %}
+        {% set editable_count = (columns|length - fixed_count) if columns else 0 %}
+        <div class="p-3 border-bottom bg-light d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div>
+                <span class="text-muted small">Sheet: <strong>{{ sheet_name }}</strong></span>
             </div>
-            <div class="form-check form-check-inline">
-                <input class="form-check-input" type="checkbox" id="toggleEditable">
-                <label class="form-check-label" for="toggleEditable">Show editable columns</label>
+            <div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="checkbox" id="toggleFixed">
+                    <label class="form-check-label" for="toggleFixed">Show uneditable (fixed) columns ({{ fixed_count }})</label>
+                </div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="checkbox" id="toggleEditable">
+                    <label class="form-check-label" for="toggleEditable">Show editable columns ({{ editable_count }})</label>
+                </div>
             </div>
         </div>
         {% if schools %}
-        {% set fixed_count = (fixed_col_count | default(0)) | int %}
         <div class="table-responsive">
             <table class="table table-hover mb-0">
                 <thead>
@@ -118,30 +124,60 @@
         {% endif %}
     </div>
 </div>
+<script>
+// Debug-friendly logging
+function svlog(...args) { try { console.log('[sheet_view]', ...args); } catch(_) {} }
+function sverr(...args) { try { console.error('[sheet_view]', ...args); } catch(_) {} }
 
-{# Hidden sections for columns; shown when checkboxes are ticked #}
-{% if columns and fixed_count > 0 %}
-<div id="fixedColumnsCard" class="card mt-4 d-none">
-    <div class="card-header">
-        <h6 class="mb-0"><i class="fas fa-lock me-2 text-warning"></i>Uneditable (Fixed) Columns</h6>
-    </div>
-    <div class="card-body">
-        <div class="row">
-            {% for column in columns[:fixed_count] %}
-            <div class="col-md-4 col-lg-3 mb-2">
-                <span class="badge bg-secondary">{{ column }}</span>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-    </div>
-{% endif %}
+document.addEventListener('DOMContentLoaded', function() {
+    const tableName = {{ table_name|tojson }};
+    const toggleFixed = document.getElementById('toggleFixed');
+    const toggleEditable = document.getElementById('toggleEditable');
+    const fixedCard = document.getElementById('fixedColumnsCard');
+    const editableCard = document.getElementById('editableColumnsCard');
 
-{% if columns and (columns|length - fixed_count) > 0 %}
-<div id="editableColumnsCard" class="card mt-4 d-none">
-    <div class="card-header">
-        <h6 class="mb-0"><i class="fas fa-edit me-2 text-success"></i>Editable Columns</h6>
-    </div>
+    if (!toggleFixed || !toggleEditable) sverr('checkbox elements missing');
+    if (!fixedCard || !editableCard) sverr('column cards missing');
+
+    const keyFixed = `sv_fixed_${tableName}`;
+    const keyEditable = `sv_editable_${tableName}`;
+
+    // Initialize from localStorage
+    try {
+        const savedFixed = localStorage.getItem(keyFixed);
+        const savedEditable = localStorage.getItem(keyEditable);
+        if (toggleFixed && savedFixed !== null) toggleFixed.checked = savedFixed === '1';
+        if (toggleEditable && savedEditable !== null) toggleEditable.checked = savedEditable === '1';
+    } catch (e) { sverr('localStorage read failed', e); }
+
+    // Apply initial visibility
+    if (fixedCard && toggleFixed) fixedCard.classList.toggle('d-none', !toggleFixed.checked);
+    if (editableCard && toggleEditable) editableCard.classList.toggle('d-none', !toggleEditable.checked);
+
+    // Wire up handlers with persistence
+    if (toggleFixed && fixedCard) {
+        toggleFixed.addEventListener('change', () => {
+            const show = !!toggleFixed.checked;
+            fixedCard.classList.toggle('d-none', !show);
+            try { localStorage.setItem(keyFixed, show ? '1' : '0'); } catch (e) { sverr('localStorage write fixed failed', e); }
+            svlog('toggle fixed', { tableName, show });
+        });
+    }
+    if (toggleEditable && editableCard) {
+        toggleEditable.addEventListener('change', () => {
+            const show = !!toggleEditable.checked;
+            editableCard.classList.toggle('d-none', !show);
+            try { localStorage.setItem(keyEditable, show ? '1' : '0'); } catch (e) { sverr('localStorage write editable failed', e); }
+            svlog('toggle editable', { tableName, show });
+        });
+    }
+});
+
+// Surface uncaught errors
+window.addEventListener('error', (e) => {
+    sverr('uncaught error', { message: e.message, error: e.error });
+});
+</script>
     <div class="card-body">
         <div class="row">
             {% for column in columns[fixed_count:] %}
