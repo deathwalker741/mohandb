@@ -71,40 +71,42 @@ def to_param_key(name: str) -> str:
         safe = f"c_{safe}"
     return safe
 
+
+def fetch_columns(conn, table_name: str):
+    """Get ordered column names from information_schema (works even for empty tables)."""
+    rs = conn.execute(
+        text(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = :t
+            ORDER BY ordinal_position
+            """
+        ),
+        {"t": table_name},
+    )
+    return [row[0] for row in rs]
+
 @app.route('/')
 def index():
     if 'user' not in session:
         return redirect(url_for('login'))
-    # Build dashboard metadata with actual column lists per table
+    # Build dashboard metadata with actual column lists per table (robust)
     dashboard_sheets = {}
-    try:
-        with engine.connect() as connection:
-            for table_name, cfg in SHEET_CONFIGS.items():
-                try:
-                    cols_rs = connection.execute(text(f'SELECT * FROM {sql_ident(table_name)} LIMIT 1;'))
-                    columns = list(cols_rs.keys())
-                except Exception:
-                    columns = []
-
-                fixed_count = int(cfg.get('fixed_columns', 0))
-                fixed_cols = columns[:fixed_count] if columns else []
-                # editable columns = after fixed_count, excluding id
-                editable_cols = [c for i, c in enumerate(columns) if (i + 1) > fixed_count and c != 'id']
-
-                dashboard_sheets[table_name] = {
-                    'name': cfg.get('name', table_name),
-                    'fixed_count': fixed_count,
-                    'fixed_cols': fixed_cols,
-                    'editable_cols': editable_cols,
-                }
-    except Exception:
-        # Fallback to names only if DB metadata fetch fails
+    with engine.connect() as conn:
         for table_name, cfg in SHEET_CONFIGS.items():
+            columns = fetch_columns(conn, table_name)
+            raw_fixed = int(cfg.get('fixed_columns', 0))
+            # Clamp to valid range [0, len(columns)]
+            fixed_count = max(0, min(raw_fixed, len(columns)))
+            fixed_cols = columns[:fixed_count]
+            editable_cols = [c for i, c in enumerate(columns) if (i + 1) > fixed_count and c != 'id']
+
             dashboard_sheets[table_name] = {
                 'name': cfg.get('name', table_name),
-                'fixed_count': int(cfg.get('fixed_columns', 0)),
-                'fixed_cols': [],
-                'editable_cols': [],
+                'fixed_count': fixed_count,
+                'fixed_cols': fixed_cols,
+                'editable_cols': editable_cols,
             }
 
     return render_template('dashboard.html', sheets=dashboard_sheets, user=session['user'])
