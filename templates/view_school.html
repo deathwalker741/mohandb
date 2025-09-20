@@ -93,45 +93,57 @@
 
 {% block scripts %}
 <script>
-function svlog(){try{console.log.apply(console,['[view_school]'].concat(Array.from(arguments)))}catch(e){}}
-function sverr(){try{console.error.apply(console,['[view_school]'].concat(Array.from(arguments)))}catch(e){}}
+// Minimal, compatible helpers
+function svlog(){try{console.log.apply(console,['[view_school]'].concat([].slice.call(arguments)))}catch(e){}}
+function sverr(){try{console.error.apply(console,['[view_school]'].concat([].slice.call(arguments)))}catch(e){}}
 
-document.addEventListener('DOMContentLoaded', function() {
-  const tableName = "{{ table_name }}";
-  let schoolData = {};
+document.addEventListener('DOMContentLoaded', function () {
+  svlog('init script');
+  var tableName = "{{ table_name }}";
+  var schoolData = {};
   try {
-    const el = document.getElementById('school-json');
+    var el = document.getElementById('school-json');
     if (el) schoolData = JSON.parse(el.textContent || '{}');
   } catch(e) { sverr('json parse', e); }
-  const possible = ['school_no','school_number','schoolcode','school_code','udise_code','udise','serial_no','sr_no','s_no'];
-  let sno = null;
-  for (const k of possible) { if (schoolData && schoolData[k]) { sno = schoolData[k]; break; } }
-  const schoolKey = `vs_${tableName}_${sno ?? 'row'}`;
+  var possible = ['school_no','school_number','schoolcode','school_code','udise_code','udise','serial_no','sr_no','s_no'];
+  var sno = null;
+  for (var i=0;i<possible.length;i++){ var k = possible[i]; if (schoolData && schoolData[k]) { sno = schoolData[k]; break; } }
+  var schoolKey = 'vs_' + tableName + '_' + (sno || 'row');
 
-  const sections = ['current','asset','cares','mm','me','ms'];
-  const chk = (id) => document.getElementById('sec_' + id);
-  const sel = (sec) => document.querySelectorAll(`.section-block[data-section="${sec}"]`);
-  const setVis = (sec, show) => sel(sec).forEach(el=>el.classList.toggle('d-none', !show));
+  var sections = ['current','asset','cares','mm','me','ms'];
+  function chk(id){ return document.getElementById('sec_' + id); }
+  function sel(sec){ return document.querySelectorAll('.section-block[data-section="' + sec + '"]'); }
+  function setVis(sec, show){
+    var nodes = sel(sec);
+    for (var j=0;j<nodes.length;j++){
+      nodes[j].classList.toggle('d-none', !show);
+    }
+  }
 
   // init from storage (default show current only)
-  let state = { current: true, asset: false, cares: false, mm: false, me: false, ms: false };
+  var state = { current: true, asset: false, cares: false, mm: false, me: false, ms: false };
   try {
-    const raw = localStorage.getItem(schoolKey);
-    if (raw) state = Object.assign(state, JSON.parse(raw));
+    var raw = localStorage.getItem(schoolKey);
+    if (raw) {
+      var obj = JSON.parse(raw);
+      for (var key in obj){ if (Object.prototype.hasOwnProperty.call(obj, key)) state[key] = !!obj[key]; }
+    }
   } catch (e) { sverr('storage read', e); }
 
-  sections.forEach(sec => {
-    const el = chk(sec);
-    if (!el) return;
-    el.checked = !!state[sec];
-    setVis(sec, !!state[sec]);
-    el.addEventListener('change', () => {
-      state[sec] = !!el.checked;
-      setVis(sec, state[sec]);
-      try { localStorage.setItem(schoolKey, JSON.stringify(state)); } catch (e) { sverr('storage write', e); }
-      svlog('toggle', { sec, show: state[sec] });
-    });
-  });
+  for (var s=0;s<sections.length;s++){
+    (function(sec){
+      var elc = chk(sec);
+      if (!elc) return;
+      elc.checked = !!state[sec];
+      setVis(sec, !!state[sec]);
+      elc.addEventListener('change', function(){
+        state[sec] = !!elc.checked;
+        setVis(sec, state[sec]);
+        try { localStorage.setItem(schoolKey, JSON.stringify(state)); } catch (e) { sverr('storage write', e); }
+        svlog('toggle', sec, state[sec]);
+      });
+    })(sections[s]);
+  }
 });
 </script>
 <script id="school-json" type="application/json">{{ school | tojson }}</script>
