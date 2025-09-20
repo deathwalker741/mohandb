@@ -234,6 +234,16 @@ def view_sheet(table_name):
             email = str(user.get('email','')).strip().lower()
             can_edit = (email == 'mohan.kumar@ei.study')
         school['can_edit'] = can_edit
+        # Compute safe integer edit_id; some tables may have non-integer or composite id strings
+        edit_id = None
+        try:
+            if 'id' in school and school['id'] is not None:
+                s = str(school['id']).strip()
+                if s.isdigit():
+                    edit_id = int(s)
+        except Exception:
+            edit_id = None
+        school['edit_id'] = edit_id
         if not allow_actions:
             # Force no edit button on read-only sheets
             school['can_edit'] = False
