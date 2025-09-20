@@ -111,9 +111,7 @@
                         {% for column in dyn_editable_cols %}
                         <th class="dyn-col editable-col d-none" data-type="editable" data-col="{{ column }}">{{ column.replace('_', ' ')|title }}</th>
                         {% endfor %}
-                        {% if allow_actions %}
                         <th>Actions</th>
-                        {% endif %}
                     </tr>
                 </thead>
                 <tbody>
@@ -154,18 +152,33 @@
                             {{ school.get(column) if school.get(column) is not none and school.get(column) != '' else '—' }}
                         </td>
                         {% endfor %}
-                        {% if allow_actions %}
-                        <td>
-                            {% if school.can_edit %}
+                        <td class="d-flex gap-2">
+                            {# View link by school_no, always available if we can resolve a number #}
+                            {% set v_sno = school.get('school_no')
+                                or school.get('school_number')
+                                or school.get('schoolcode')
+                                or school.get('school_code')
+                                or school.get('udise_code')
+                                or school.get('udise')
+                                or school.get('serial_no')
+                                or school.get('sr_no')
+                                or school.get('s_no') %}
+                            {% if v_sno %}
+                            <a href="{{ url_for('view_school_detail', table_name=table_name, school_no=v_sno) }}"
+                               class="btn btn-outline-secondary btn-sm">
+                                <i class="fas fa-eye me-1"></i>View
+                            </a>
+                            {% endif %}
+
+                            {% if allow_actions and school.can_edit %}
                             <a href="{{ url_for('edit_school', table_name=table_name, school_id=school.id) }}" 
                                class="btn btn-primary btn-sm">
                                 <i class="fas fa-edit me-1"></i>Edit
                             </a>
-                            {% else %}
-                            <span class="text-muted small"><i class="fas fa-eye me-1"></i>View only</span>
+                            {% elif allow_actions %}
+                            <span class="text-muted small align-self-center"><i class="fas fa-eye me-1"></i>View only</span>
                             {% endif %}
                         </td>
-                        {% endif %}
                     </tr>
                     {% endfor %}
                 </tbody>

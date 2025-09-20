@@ -248,7 +248,7 @@ def edit_school(table_name, school_id):
         return redirect(url_for('view_sheet', table_name=table_name))
 
     with engine.connect() as connection:
-        query = text(f"SELECT * FROM {table_name} WHERE id = :school_id")
+        query = text(f"SELECT * FROM {sql_ident(table_name)} WHERE {sql_ident('id')} = :school_id")
         school = connection.execute(query, {'school_id': school_id}).mappings().first()
 
     if not school:
@@ -271,6 +271,53 @@ def edit_school(table_name, school_id):
                          columns=columns,
                          fixed_col_count=fixed_cols,
                          user=session['user'])
+
+@app.route('/school/<table_name>/s/<school_no>')
+def view_school_detail(table_name, school_no):
+    if 'user' not in session:
+        return redirect(url_for('login'))
+    if table_name not in SHEET_CONFIGS:
+        flash('Sheet not found!', 'error')
+        return redirect(url_for('index'))
+
+    config = SHEET_CONFIGS[table_name]
+    with engine.connect() as conn:
+        cols = fetch_columns(conn, table_name)
+        school_no_col = find_school_no_column(cols)
+        if not school_no_col:
+            flash('School number column not found in this sheet.', 'error')
+            return redirect(url_for('view_sheet', table_name=table_name))
+        sel = text(
+            f"SELECT * FROM {sql_ident(table_name)} WHERE {sql_ident(school_no_col)} = :sno LIMIT 1"
+        )
+        row = conn.execute(sel, {"sno": school_no}).mappings().first()
+        if not row:
+            flash('School not found in this sheet.', 'error')
+            return redirect(url_for('view_sheet', table_name=table_name))
+
+    school = dict(row)
+    user = session['user']
+    allow_actions = table_name not in READ_ONLY_TABLES
+    can_edit_row = bool(allow_actions and can_edit_school(user, school))
+    # Provide an edit_id if convertible to int
+    edit_id = None
+    try:
+        if 'id' in school and school['id'] is not None:
+            edit_id = int(str(school['id']))
+    except Exception:
+        edit_id = None
+
+    return render_template(
+        'view_school.html',
+        sheet_name=config['name'],
+        table_name=table_name,
+        school=school,
+        columns=list(school.keys()),
+        fixed_col_count=config.get('fixed_columns', 0),
+        user=user,
+        can_edit_row=can_edit_row and (edit_id is not None),
+        edit_id=edit_id,
+    )
 
 @app.route('/update/<table_name>/<int:school_id>', methods=['POST'])
 def update_school(table_name, school_id):
