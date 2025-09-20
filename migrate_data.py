@@ -1,6 +1,7 @@
 import pandas as pd
 from sqlalchemy import create_engine
 import os
+import secrets
 
 # --- IMPORTANT ---
 # You must set this DATABASE_URL variable in your local environment.
@@ -45,3 +46,22 @@ def migrate():
 
 if __name__ == "__main__":
     migrate()
+
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "NIXPACKS"
+  },
+  "deploy": {
+    "startCommand": "gunicorn app:app",
+    "healthcheckPath": "/health",
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  },
+  "nixpacks": {
+    "pkgs": [
+      "postgresql_16",
+      "gcc"
+    ]
+  }
+}
