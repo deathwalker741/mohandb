@@ -56,6 +56,7 @@
             <table class="table table-hover mb-0">
                 <thead>
                     <tr>
+                        <th>School No</th>
                         <th>School Name</th>
                         <th>Division/Zone</th>
                         <th>Actions</th>
@@ -64,6 +65,18 @@
                 <tbody>
                     {% for school in schools %}
                     <tr>
+                        <td>
+                            {% set school_no = school.get('school_no')
+                                or school.get('school_number')
+                                or school.get('schoolcode')
+                                or school.get('school_code')
+                                or school.get('udise_code')
+                                or school.get('udise')
+                                or school.get('serial_no')
+                                or school.get('sr_no')
+                                or school.get('s_no') %}
+                            {{ school_no or 'N/A' }}
+                        </td>
                         <td>
                             {# Prefer normalized keys created by migration: lowercase with underscores #}
                             {% set school_name = school.get('school_name') or school.get('name') or school.get('school') or school.get('schoolname') %}
