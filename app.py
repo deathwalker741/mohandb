@@ -292,13 +292,13 @@ def update_school(table_name, school_id):
     if 'user' not in session:
         return jsonify({'success': False, 'message': 'Unauthorized'}), 401
     
-    # Get all column names for the table to determine which are editable
+    # Reflect table metadata and fetch the existing row
+    metadata = MetaData()
+    table = Table(table_name, metadata, autoload_with=engine)
+    all_columns = [c.name for c in table.columns]
     with engine.connect() as connection:
-        # Use a placeholder that is unlikely to exist to get columns without fetching data
-        query = text(f"SELECT * FROM {table_name} WHERE 1=0;")
-        columns = connection.execute(query).keys()
-        school_query = text(f"SELECT * FROM {table_name} WHERE id = :school_id")
-        school = connection.execute(school_query, {'school_id': school_id}).mappings().first()
+        school_query = select(table).where(table.c.id == school_id)
+        school = connection.execute(school_query).mappings().first()
 
     if not school:
         return jsonify({'success': False, 'message': 'School not found'})
@@ -306,30 +306,28 @@ def update_school(table_name, school_id):
         return jsonify({'success': False, 'message': 'Permission denied'})
 
     config = SHEET_CONFIGS[table_name]
-    fixed_col_count = config['fixed_columns']
-    
-    # We skip the 'id' column, so we use index + 1
-    editable_columns = [col for idx, col in enumerate(columns) if idx + 1 > fixed_col_count and col != 'id']
+    fixed_col_count = int(config.get('fixed_columns', 0))
 
-    # Build the SQL UPDATE statement securely
-    set_clauses = []
-    values_to_update = {}
-    for column in editable_columns:
-        if column in request.form:
-            set_clauses.append(f"{column} = :{column}")
-            values_to_update[column] = request.form[column]
-    
-    if not set_clauses:
+    # Determine editable columns based on configured fixed column count
+    if fixed_col_count >= 0:
+        editable_columns = [col for idx, col in enumerate(all_columns) if (idx + 1) > fixed_col_count and col != 'id']
+    else:
+        editable_columns = []
+
+    # Collect updates from submitted form for editable columns only
+    updates = {}
+    for col in editable_columns:
+        if col in request.form:
+            updates[table.c[col]] = request.form[col]
+
+    if not updates:
         return jsonify({'success': False, 'message': 'No data to update'})
 
-    values_to_update['school_id'] = school_id
-    update_statement = f"UPDATE {table_name} SET {', '.join(set_clauses)} WHERE id = :school_id"
-
     try:
-        with engine.connect() as connection:
-            trans = connection.begin()
-            connection.execute(text(update_statement), values_to_update)
-            trans.commit()
+        # Use SQLAlchemy Core update to ensure identifiers are properly quoted
+        with engine.begin() as connection:
+            stmt = table.update().where(table.c.id == school_id).values(updates)
+            connection.execute(stmt)
         return jsonify({'success': True, 'message': 'School data updated successfully'})
     except Exception as e:
         return jsonify({'success': False, 'message': f'Database error: {e}'})
