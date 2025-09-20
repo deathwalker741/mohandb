@@ -27,11 +27,9 @@
                 </div>
                 
                 <p class="card-text text-muted">
-                    {% if sheet_data.fixed_columns > 0 %}
-                        {{ sheet_data.fixed_columns }} fixed columns, 
+                    {% if sheet_data.fixed_columns|length > 0 %}
+                        {{ sheet_data.fixed_columns|length }} fixed columns, 
                         {{ sheet_data.editable_columns|length }} editable columns
-                    {% elif sheet_data.fixed_columns == 0 %}
-                        0 fixed columns, {{ sheet_data.editable_columns|length }} editable columns
                     {% else %}
                         All columns are fixed
                     {% endif %}
