@@ -1,0 +1,8 @@
+[phases.setup]
+# Extend default detected packages and add required ones.
+# Use generic 'postgresql' client instead of the invalid 'postgresql_16.dev'.
+# Add gcc and pkg-config for building some Python wheels if needed.
+nixPkgs = ['...', 'postgresql', 'gcc', 'pkg-config']
+
+[start]
+cmd = 'gunicorn app:app'
