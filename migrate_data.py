@@ -1,17 +1,20 @@
 import pandas as pd
 from sqlalchemy import create_engine
 import os
-import secrets
 
 # --- IMPORTANT ---
-# You must set this DATABASE_URL variable in your local environment.
-# Get it from the "Connect" tab of your PostgreSQL database in Railway.
-DATABASE_URL = "postgresql://postgres:ZVrHvzkEWtXRZFtDNBZLOsdYrCieVufB@tramway.proxy.rlwy.net:31926/railway"
-EXCEL_FILE_PATH = r"data/Tracker 2025-26.xlsx" # Use your local path
+# Get the Public connection string from the Railway Postgres "Connect" tab
+# and set it as an environment variable before running this script.
+# On Windows PowerShell:
+#   $env:DATABASE_URL = "postgresql://user:pass@host:port/db"
+DATABASE_URL = os.environ.get("DATABASE_URL")
+EXCEL_FILE_PATH = r"data/Tracker 2025-26.xlsx"  # Adjust if needed
 
 def migrate():
-    print("Connecting to the database...")
-    engine = create_engine(DATABASE_URL)
+  if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL is not set. Set it to the Public connection string from Railway Postgres and re-run.")
+  print("Connecting to the database...")
+  engine = create_engine(DATABASE_URL)
     
     print(f"Reading Excel file from {EXCEL_FILE_PATH}...")
     xls = pd.ExcelFile(EXCEL_FILE_PATH)
@@ -36,9 +39,9 @@ def migrate():
             # Clean up column names to be SQL-friendly
             df.columns = [str(col).strip().replace(' ', '_').replace('-', '_').lower() for col in df.columns]
             
-            # Add an 'id' column to be the primary key, if it doesn't exist
-            if 'id' not in df.columns:
-                df.insert(0, 'id', range(1, 1 + len(df)))
+      # Add an 'id' column to be the primary key, if it doesn't exist
+      if 'id' not in df.columns:
+        df.insert(0, 'id', range(1, 1 + len(df)))
             
             # Use pandas to_sql to create table and insert data
             df.to_sql(table_name, engine, if_exists='replace', index=False)
@@ -46,22 +49,3 @@ def migrate():
 
 if __name__ == "__main__":
     migrate()
-
-{
-  "$schema": "https://railway.app/railway.schema.json",
-  "build": {
-    "builder": "NIXPACKS"
-  },
-  "deploy": {
-    "startCommand": "gunicorn app:app",
-    "healthcheckPath": "/health",
-    "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 10
-  },
-  "nixpacks": {
-    "pkgs": [
-      "postgresql_16",
-      "gcc"
-    ]
-  }
-}
