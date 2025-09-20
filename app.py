@@ -41,54 +41,27 @@ def authenticate_user(email, password):
     return None
 
 def can_edit_school(user, school_data):
-    """Check if user can edit a specific school based on division"""
-    if user['division'] == 'All Divisions':
+    """Check if user can edit a specific school based on division/zone fields.
+
+    Be tolerant to different column names that may come from Excel normalization
+    (e.g., 'zone' vs 'division').
+    """
+    if user.get('division') == 'All Divisions':
         return True
-    # Try common variants of the zone/division key
-    zone_val = (
-        school_data.get('zone') or
-        school_data.get('Zone') or
-        school_data.get('division') or
-        school_data.get('Division') or
-        ''
+    # Try common variants
+    school_division = (
+        school_data.get('zone')
+        or school_data.get('division')
+        or school_data.get('divison')  # common misspelling safeguard
+        or ''
     )
-    return str(zone_val).strip() == str(user['division']).strip()
+    return str(school_division).strip().lower() == str(user.get('division', '')).strip().lower()
 
 @app.route('/')
 def index():
     if 'user' not in session:
         return redirect(url_for('login'))
-    # Build metadata for each sheet for display
-    sheets_meta = {}
-    with engine.connect() as connection:
-        for table_name, cfg in SHEET_CONFIGS.items():
-            # Get columns
-            col_rs = connection.execute(text(f"SELECT * FROM {table_name} WHERE 1=0;"))
-            columns = list(col_rs.keys())
-            # Count rows (best-effort)
-            try:
-                count_rs = connection.execute(text(f"SELECT COUNT(*) AS c FROM {table_name};")).first()
-                total_rows = int(count_rs[0]) if count_rs else 0
-            except Exception:
-                total_rows = 0
-
-            fixed_count = cfg['fixed_columns']
-            if fixed_count is not None and fixed_count >= 0:
-                fixed_columns = list(columns[:fixed_count])
-                editable_columns = [c for i, c in enumerate(columns) if i >= fixed_count and c != 'id']
-            else:
-                fixed_columns = list(columns)
-                editable_columns = []
-
-            sheets_meta[table_name] = {
-                'name': cfg['name'],
-                'columns': columns,
-                'fixed_columns': fixed_columns,
-                'editable_columns': editable_columns,
-                'total_rows': total_rows,
-            }
-
-    return render_template('dashboard.html', sheets=sheets_meta, user=session['user'])
+    return render_template('dashboard.html', sheets=SHEET_CONFIGS, user=session['user'])
 
 @app.route('/health')
 def health_check():
@@ -127,95 +100,27 @@ def view_sheet(table_name):
         flash('Sheet not found!', 'error')
         return redirect(url_for('index'))
 
-    # Parse query params for search/filter/sort
-    q = request.args.get('q', '').strip()
-    filter_col = request.args.get('filter_col', '').strip()
-    filter_val = request.args.get('filter_val', '').strip()
-    sort_by = request.args.get('sort_by', '').strip()
-    sort_dir = request.args.get('sort_dir', 'asc').strip().lower()
-
     with engine.connect() as connection:
-        # Get columns without fetching data
-        col_rs = connection.execute(text(f"SELECT * FROM {table_name} WHERE 1=0;"))
-        columns = list(col_rs.keys())
-
-        # Helper to quote identifiers with potential spaces
-        def qident(name: str) -> str:
-            # Columns coming from DB metadata are trusted identifiers
-            return '"' + name.replace('"', '') + '"'
-
-        where_clauses = []
-        params = {}
-
-        # Free-text search across all columns except id
-        if q:
-            like_param = f"%{q}%"
-            params['q'] = like_param
-            searchables = [c for c in columns if c != 'id']
-            if searchables:
-                ors = [f"CAST({qident(c)} AS TEXT) ILIKE :q" for c in searchables]
-                where_clauses.append('(' + ' OR '.join(ors) + ')')
-
-        # Column-specific filter
-        if filter_col and filter_col in columns and filter_val:
-            params['filter_val'] = f"%{filter_val}%"
-            where_clauses.append(f"CAST({qident(filter_col)} AS TEXT) ILIKE :filter_val")
-
-        where_sql = (' WHERE ' + ' AND '.join(where_clauses)) if where_clauses else ''
-
-        # Sorting
-        if sort_by and sort_by in columns:
-            sort_ident = qident(sort_by)
-        else:
-            sort_ident = qident('id') if 'id' in columns else qident(columns[0]) if columns else 'id'
-        sort_dir_sql = 'DESC' if sort_dir == 'desc' else 'ASC'
-
-        sql = f"SELECT * FROM {table_name}{where_sql} ORDER BY {sort_ident} {sort_dir_sql};"
-        result = connection.execute(text(sql), params).mappings().all()
-
+        query = text(f"SELECT * FROM {table_name} ORDER BY id;")
+        result = connection.execute(query).mappings().all()
+        columns = list(result[0].keys()) if result else []
+    
     user = session['user']
     # Create a mutable copy of each school row
     schools_list = [dict(school) for school in result]
     for school in schools_list:
         school['can_edit'] = can_edit_school(user, school)
-
-    # Build sheet_data expected by templates
+        
     config = SHEET_CONFIGS[table_name]
-    fixed_count = config['fixed_columns']
-    fixed_columns = []
-    editable_columns = []
-    if columns:
-        if fixed_count is not None and fixed_count >= 0:
-            fixed_columns = list(columns[:fixed_count])
-            editable_columns = [c for i, c in enumerate(columns) if i >= fixed_count and c != 'id']
-        else:
-            fixed_columns = list(columns)
-            editable_columns = []
-
-    sheet_data = {
-        'name': config['name'],
-        'columns': columns,
-        'fixed_columns': fixed_columns,
-        'editable_columns': editable_columns,
-        'total_rows': len(schools_list)
-    }
-
-    return render_template(
-        'sheet_view.html',
-        sheet_name=config['name'],
-        table_name=table_name,
-        schools=schools_list,
-        columns=columns,
-        fixed_col_count=fixed_count,
-        sheet_data=sheet_data,
-        # Echo query params for UI state
-        q=q,
-        filter_col=filter_col,
-        filter_val=filter_val,
-        sort_by=sort_by,
-        sort_dir=sort_dir,
-        user=user
-    )
+    fixed_cols = config['fixed_columns']
+    
+    return render_template('sheet_view.html',
+                         sheet_name=config['name'],
+                         table_name=table_name,
+                         schools=schools_list,
+                         columns=columns,
+                         fixed_col_count=fixed_cols,
+                         user=user)
 
 @app.route('/edit/<table_name>/<int:school_id>')
 def edit_school(table_name, school_id):
@@ -239,34 +144,16 @@ def edit_school(table_name, school_id):
 
     config = SHEET_CONFIGS[table_name]
     fixed_cols = config['fixed_columns']
-    columns = list(school.keys())
-
-    # Build sheet_data for template compatibility
-    if fixed_cols is not None and fixed_cols >= 0:
-        fixed_columns = list(columns[:fixed_cols])
-        editable_columns = [c for i, c in enumerate(columns) if i >= fixed_cols and c != 'id']
-    else:
-        fixed_columns = list(columns)
-        editable_columns = []
-
-    sheet_data = {
-        'name': config['name'],
-        'columns': columns,
-        'fixed_columns': fixed_columns,
-        'editable_columns': editable_columns
-    }
-
-    return render_template(
-        'edit_school.html',
-        sheet_name=config['name'],
-        table_name=table_name,
-        school=school,
-        school_id=school_id,
-        columns=columns,
-        fixed_col_count=fixed_cols,
-        sheet_data=sheet_data,
-        user=session['user']
-    )
+    columns = list(school.keys()) if school else []
+    
+    return render_template('edit_school.html',
+                         sheet_name=config['name'],
+                         table_name=table_name,
+                         school=school,
+                         school_id=school_id,
+                         columns=columns,
+                         fixed_col_count=fixed_cols,
+                         user=session['user'])
 
 @app.route('/update/<table_name>/<int:school_id>', methods=['POST'])
 def update_school(table_name, school_id):
