@@ -95,6 +95,9 @@ def index():
     dashboard_sheets = {}
     with engine.connect() as conn:
         for table_name, cfg in SHEET_CONFIGS.items():
+            # Hide Summary Data from dashboard cards
+            if table_name == 'summary_data':
+                continue
             columns = fetch_columns(conn, table_name)
             raw_fixed = int(cfg.get('fixed_columns', 0))
             # Clamp to valid range [0, len(columns)]
