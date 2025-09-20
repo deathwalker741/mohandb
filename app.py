@@ -93,6 +93,30 @@ def is_super_editor(user) -> bool:
     email = str(user.get('email', '')).strip().lower()
     return email == 'mohan.kumar@ei.study'
 
+def is_ei_user(user) -> bool:
+    """True if user has EI-level access (any @ei.study or is_ei flag)."""
+    email = str(user.get('email', '')).strip().lower()
+    return bool(user.get('is_ei') or email.endswith('@ei.study'))
+
+def get_school_division(row: dict) -> str:
+    """Best-effort to get a row's division/zone string."""
+    return str(
+        row.get('zone')
+        or row.get('division')
+        or row.get('divison')
+        or ''
+    )
+
+def matches_user_division(user, row: dict) -> bool:
+    """For division users, ensure row is in user's division; EI users always match."""
+    if is_ei_user(user):
+        return True
+    udiv = str(user.get('division', '')).strip().lower()
+    if not udiv or udiv == 'all divisions':
+        return True
+    rdiv = get_school_division(row).strip().lower()
+    return rdiv == udiv
+
 # Common key variants for School Number across sheets
 SCHOOL_NO_KEYS = [
     'school_no', 'school_number', 'schoolcode', 'school_code',
@@ -334,11 +358,9 @@ def view_sheet(table_name):
                 app.logger.warning(f"AUS merge columns skipped: {merge_err}")
             except Exception:
                 pass
-    # EI users can view all schools; division users see only their editable schools on editable sheets
-    is_ei_user = bool(user.get('is_ei') or str(user.get('email','')).lower().endswith('@ei.study'))
-    # Division users only see editable rows on editable sheets, except for all_unique_schools which is view-all
-    if (not is_ei_user) and allow_actions and table_name != 'all_unique_schools':
-        schools_list = [s for s in schools_list if s.get('can_edit')]
+    # Division users should only see schools from their zone/division on all tables
+    if not is_ei_user(user):
+        schools_list = [s for s in schools_list if matches_user_division(user, s)]
         
     config = SHEET_CONFIGS[table_name]
     fixed_cols = config['fixed_columns']
@@ -424,6 +446,11 @@ def view_school_detail(table_name, school_no):
     school = dict(row)
     user = session['user']
     allow_actions = table_name not in READ_ONLY_TABLES
+    # Division user access gate: only their division/zone rows are visible
+    if not is_ei_user(user):
+        if not matches_user_division(user, school):
+            flash('You do not have access to this school (different division/zone).', 'error')
+            return redirect(url_for('view_sheet', table_name=table_name))
     # Only Mohan can edit all_unique_schools
     if table_name == 'all_unique_schools':
         can_edit_row = bool(allow_actions and str(user.get('email','')).strip().lower() == 'mohan.kumar@ei.study')
