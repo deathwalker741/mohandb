@@ -106,14 +106,59 @@
 {% endblock %}
 {% block scripts %}
 <script>
+// Debug helpers
+function dbg(...args) { try { console.log('[dashboard]', ...args); } catch (_) {} }
+function dberr(...args) { try { console.error('[dashboard]', ...args); } catch (_) {} }
+
+// Toggle visibility for a given sheet and section type
 function toggleDashSection(name, which) {
     const id = which === 'fixed' ? `dash-fixed-cols-${name}` : `dash-editable-cols-${name}`;
     const cbId = which === 'fixed' ? `dash-fixed-${name}` : `dash-editable-${name}`;
     const section = document.getElementById(id);
     const cb = document.getElementById(cbId);
+    dbg('toggleDashSection called', { name, which, sectionId: id, cbId, sectionExists: !!section, cbExists: !!cb });
+    if (!section) { dberr('section not found', id); }
+    if (!cb) { dberr('checkbox not found', cbId); }
     if (section && cb) {
-        section.classList.toggle('d-none', !cb.checked);
+        const shouldShow = !!cb.checked;
+        section.classList.toggle('d-none', !shouldShow);
+        dbg('toggled section', { id, shouldShow, classList: Array.from(section.classList) });
     }
 }
+
+// Log initial DOM state for debugging
+document.addEventListener('DOMContentLoaded', () => {
+    try {
+        dbg('DOMContentLoaded');
+        // Log available fixed/editable containers and checkboxes per sheet
+        const fixedSections = Array.from(document.querySelectorAll('[id^="dash-fixed-cols-"]')).map(el => el.id);
+        const editableSections = Array.from(document.querySelectorAll('[id^="dash-editable-cols-"]')).map(el => el.id);
+        const fixedChecks = Array.from(document.querySelectorAll('[id^="dash-fixed-"]')).map(el => ({ id: el.id, checked: el.checked }));
+        const editableChecks = Array.from(document.querySelectorAll('[id^="dash-editable-"]')).map(el => ({ id: el.id, checked: el.checked }));
+        dbg('sections', { fixedSections, editableSections });
+        dbg('checkboxes', { fixedChecks, editableChecks });
+
+        // Attach explicit change listeners that log events
+        fixedChecks.forEach(({ id }) => {
+            const cb = document.getElementById(id);
+            cb && cb.addEventListener('change', (e) => {
+                dbg('fixed checkbox change', { id, checked: e.target.checked });
+            });
+        });
+        editableChecks.forEach(({ id }) => {
+            const cb = document.getElementById(id);
+            cb && cb.addEventListener('change', (e) => {
+                dbg('editable checkbox change', { id, checked: e.target.checked });
+            });
+        });
+    } catch (e) {
+        dberr('init error', e);
+    }
+});
+
+// Surface uncaught errors
+window.addEventListener('error', (e) => {
+    dberr('uncaught error', { message: e.message, error: e.error });
+});
 </script>
 {% endblock %}
