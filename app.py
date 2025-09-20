@@ -115,7 +115,8 @@ def view_sheet(table_name):
         return redirect(url_for('index'))
 
     with engine.connect() as connection:
-        query = text(f"SELECT * FROM {table_name} ORDER BY id;")
+        # Quote identifiers to be safe
+        query = text(f"SELECT * FROM {sql_ident(table_name)} ORDER BY {sql_ident('id')};")
         result = connection.execute(query).mappings().all()
         columns = list(result[0].keys()) if result else []
     
@@ -124,6 +125,8 @@ def view_sheet(table_name):
     schools_list = [dict(school) for school in result]
     for school in schools_list:
         school['can_edit'] = can_edit_school(user, school)
+    # Show only schools the user can edit
+    schools_list = [s for s in schools_list if s.get('can_edit')]
         
     config = SHEET_CONFIGS[table_name]
     fixed_cols = config['fixed_columns']
