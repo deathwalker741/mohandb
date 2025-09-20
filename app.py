@@ -25,6 +25,12 @@ SHEET_CONFIGS = {
     'summary_data': {'name': 'Summary Data', 'fixed_columns': -1}
 }
 
+# Tables that are view-only (no edits allowed)
+READ_ONLY_TABLES = {
+    'summary_data',
+    'all_unique_schools',
+}
+
 def load_users():
     """Load users from JSON file"""
     try:
@@ -187,13 +193,17 @@ def view_sheet(table_name):
         columns = list(result[0].keys()) if result else []
     
     user = session['user']
+    allow_actions = table_name not in READ_ONLY_TABLES
     # Create a mutable copy of each school row
     schools_list = [dict(school) for school in result]
     for school in schools_list:
         school['can_edit'] = can_edit_school(user, school)
-    # EI users can view all schools; division users see only their editable schools
+        if not allow_actions:
+            # Force no edit button on read-only sheets
+            school['can_edit'] = False
+    # EI users can view all schools; division users see only their editable schools on editable sheets
     is_ei_user = bool(user.get('is_ei') or str(user.get('email','')).lower().endswith('@ei.study'))
-    if not is_ei_user:
+    if not is_ei_user and allow_actions:
         schools_list = [s for s in schools_list if s.get('can_edit')]
         
     config = SHEET_CONFIGS[table_name]
@@ -205,7 +215,8 @@ def view_sheet(table_name):
                          schools=schools_list,
                          columns=columns,
                          fixed_col_count=fixed_cols,
-                         user=user)
+                         user=user,
+                         allow_actions=allow_actions)
 
 @app.route('/edit/<table_name>/<int:school_id>')
 def edit_school(table_name, school_id):
