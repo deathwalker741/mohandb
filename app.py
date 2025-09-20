@@ -98,16 +98,29 @@ def is_ei_user(user) -> bool:
     return bool(user.get('is_ei'))
 
 def get_school_division(row: dict) -> str:
-    """Best-effort to get a row's division/zone string."""
-    # Prefer a previously resolved division if present
-    if '_division_resolved' in row and row['_division_resolved']:
-        return str(row['_division_resolved'])
-    return str(
-        row.get('zone')
-        or row.get('division')
-        or row.get('divison')
-        or ''
-    )
+    """Best-effort to get a row's division/zone string.
+
+    Priorities:
+    1) Pre-resolved key _division_resolved if present
+    2) Base columns: zone / division / divison
+    3) Any namespaced ext column ending with __zone / __division / __divison
+    """
+    try:
+        if isinstance(row, dict):
+            if row.get('_division_resolved'):
+                return str(row.get('_division_resolved'))
+            base = row.get('zone') or row.get('division') or row.get('divison')
+            if base:
+                return str(base)
+            for k, v in row.items():
+                if not v:
+                    continue
+                kl = str(k).lower()
+                if kl.endswith('__zone') or kl.endswith('__division') or kl.endswith('__divison'):
+                    return str(v)
+    except Exception:
+        pass
+    return ''
 
 def matches_user_division(user, row: dict) -> bool:
     """For division users, ensure row is in user's division; EI users always match."""
@@ -355,23 +368,24 @@ def view_sheet(table_name):
                         ext_columns[prefix] = namespaced_cols
                         # Also extend columns so template logic can include them if needed (treated as editable side)
                         columns.extend(namespaced_cols)
-                # After merging ext rows, resolve division for AUS if not present in base
-                try:
-                    for s in schools_list:
-                        base_div = (s.get('zone') or s.get('division') or s.get('divison') or '').strip()
-                        if base_div:
-                            s['_division_resolved'] = base_div
+                # Resolve division for each row from base or any namespaced ext field
+                for s in schools_list:
+                    if s.get('_division_resolved'):
+                        continue
+                    base_div = (s.get('zone') or s.get('division') or s.get('divison') or '').strip()
+                    if base_div:
+                        s['_division_resolved'] = base_div
+                        continue
+                    resolved = ''
+                    for k, v in s.items():
+                        if not v:
                             continue
-                        # Try from any related section
-                        for p in ['asset','cares','mm','me','ms']:
-                            cand = (
-                                s.get(f'{p}__zone') or s.get(f'{p}__division') or s.get(f'{p}__divison')
-                            )
-                            if cand:
-                                s['_division_resolved'] = str(cand).strip()
-                                break
-                except Exception:
-                    pass
+                        kl = str(k).lower()
+                        if kl.endswith('__zone') or kl.endswith('__division') or kl.endswith('__divison'):
+                            resolved = str(v).strip()
+                            break
+                    if resolved:
+                        s['_division_resolved'] = resolved
         except Exception as merge_err:
             try:
                 app.logger.warning(f"AUS merge columns skipped: {merge_err}")
@@ -465,11 +479,6 @@ def view_school_detail(table_name, school_no):
     school = dict(row)
     user = session['user']
     allow_actions = table_name not in READ_ONLY_TABLES
-    # Division user access gate: only their division/zone rows are visible
-    if not is_ei_user(user):
-        if not matches_user_division(user, school):
-            flash('You do not have access to this school (different division/zone).', 'error')
-            return redirect(url_for('view_sheet', table_name=table_name))
     # Only Mohan can edit all_unique_schools
     if table_name == 'all_unique_schools':
         can_edit_row = bool(allow_actions and str(user.get('email','')).strip().lower() == 'mohan.kumar@ei.study')
@@ -520,11 +529,31 @@ def view_school_detail(table_name, school_no):
                 }
                 for key, tname in related.items():
                     ext_sections[key] = fetch_one_by_sno(tname)
+                # Resolve division using base or ext sections
+                if not school.get('_division_resolved'):
+                    base_div = (school.get('zone') or school.get('division') or school.get('divison') or '').strip()
+                    if base_div:
+                        school['_division_resolved'] = base_div
+                    else:
+                        for sec in ['asset','cares','mm','me','ms']:
+                            d = ext_sections.get(sec) or {}
+                            for k, v in d.items():
+                                kl = str(k).lower()
+                                if kl in ('division','zone','divison') and v:
+                                    school['_division_resolved'] = str(v).strip()
+                                    break
+                            if school.get('_division_resolved'):
+                                break
         except Exception as e:
             try:
                 app.logger.warning(f"view_school_detail ext fetch failed: {e}")
             except Exception:
                 pass
+    # Division user access gate: only their division/zone rows are visible (ensure after ext resolution for AUS)
+    if not is_ei_user(user):
+        if not matches_user_division(user, school):
+            flash('You do not have access to this school (different division/zone).', 'error')
+            return redirect(url_for('view_sheet', table_name=table_name))
 
     ext_labels = {
         'current': 'Current Info',
