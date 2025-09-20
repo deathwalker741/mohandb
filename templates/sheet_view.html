@@ -1,141 +1,111 @@
 {% extends "base.html" %}
 
-{% block title %}{{ sheet_data.name }} - School Management{% endblock %}
+{% block title %}{{ sheet_data.name }} - Dashboard{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h2><i class="fas fa-table me-2"></i>{{ sheet_data.name }}</h2>
-        <p class="text-muted mb-0">{{ schools|length }} schools available for your division</p>
-    </div>
-    <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
-        <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
-    </a>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">{{ sheet_data.name }}</h3>
+    <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">Back</a>
+  
 </div>
 
-<div class="row mb-4">
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-body">
-                <h6><i class="fas fa-info-circle me-2"></i>Sheet Information</h6>
-                <ul class="list-unstyled mb-0">
-                    <li><strong>Total Columns:</strong> {{ sheet_data.columns|length }}</li>
-                    <li><strong>Fixed Columns:</strong> {{ sheet_data.fixed_columns|length }}</li>
-                    <li><strong>Editable Columns:</strong> {{ sheet_data.editable_columns|length }}</li>
-                </ul>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-body">
-                <h6><i class="fas fa-user-shield me-2"></i>Your Access</h6>
-                <ul class="list-unstyled mb-0">
-                    {% if user.division == 'All Divisions' %}
-                    <li><i class="fas fa-check text-success me-2"></i>Full edit access</li>
-                    {% else %}
-                    <li><i class="fas fa-check text-success me-2"></i>Edit access for {{ user.division }} division</li>
-                    <li><i class="fas fa-eye text-info me-2"></i>View access for other divisions</li>
-                    {% endif %}
-                </ul>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="card">
-    <div class="card-header">
-        <h5 class="mb-0">
-            <i class="fas fa-school me-2"></i>Schools List
-        </h5>
-    </div>
-    <!-- Search and Filter Bar -->
-    <div class="card-body pb-0">
-        <form class="row g-3 align-items-end" method="get">
+<form method="get" class="card mb-3">
+    <div class="card-body">
+        <div class="row g-2 align-items-end">
             <div class="col-md-4">
-                <label for="search" class="form-label mb-0">Search</label>
-                <input type="text" class="form-control" id="search" name="search" placeholder="Search by name or any field" value="{{ request.args.get('search', '') }}">
+                <label class="form-label">Search</label>
+                <input type="text" class="form-control" name="q" value="{{ q or '' }}" placeholder="Search any text column..." />
             </div>
+
+            {% for col in filterable %}
             <div class="col-md-3">
-                <label for="division" class="form-label mb-0">Division/Zone</label>
-                <select class="form-select" id="division" name="division">
+                <label class="form-label text-capitalize">{{ col.replace('_',' ') }}</label>
+                <select name="{{ col }}" class="form-select" onchange="this.form.submit()">
                     <option value="">All</option>
-                    {% set divisions = schools | map(attribute='Division') | list %}
-                    {% for div in divisions|unique %}
-                        {% if div %}
-                        <option value="{{ div }}" {% if request.args.get('division') == div %}selected{% endif %}>{{ div }}</option>
-                        {% endif %}
+                    {% for val in filter_options[col] %}
+                        <option value="{{ val }}" {% if active_filters.get(col)==val %}selected{% endif %}>{{ val }}</option>
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-2">
-                <button type="submit" class="btn btn-primary w-100"><i class="fas fa-search me-1"></i>Search</button>
+            {% endfor %}
+
+            <div class="col-md-2 d-flex gap-2">
+                <button type="submit" class="btn btn-primary flex-grow-1">Apply</button>
+                <a class="btn btn-outline-secondary" href="{{ url_for('view_sheet', table_name=table_name) }}">Clear</a>
             </div>
-        </form>
-    </div>
-    <div class="card-body p-0">
-        {% if schools %}
-        <div class="table-responsive">
-            <table class="table table-hover mb-0">
-                <thead>
-                    <tr>
-                        <th>School Name</th>
-                        <th>Division/Zone</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for school in schools %}
-                    <tr>
-                        <td>
-                            <strong>{{ school.get('School Name', school.get('Name', 'N/A')) }}</strong>
-                        </td>
-                        <td>
-                            <span class="badge bg-secondary">
-                                {{ school.get('Division', school.get('Zone', 'N/A')) }}
-                            </span>
-                        </td>
-                        <td>
-                            {% if school.can_edit %}
-                            <span class="badge bg-success">Editable</span>
-                            {% else %}
-                            <span class="badge bg-info">View Only</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if school.can_edit %}
-                            <a href="{{ url_for('edit_school', sheet_name=sheet_name, school_id=loop.index0) }}" 
-                               class="btn btn-primary btn-sm">
-                                <i class="fas fa-edit me-1"></i>Edit
-                            </a>
-                            {% else %}
-                            <button class="btn btn-outline-secondary btn-sm" disabled>
-                                <i class="fas fa-eye me-1"></i>View Only
-                            </button>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
         </div>
-        {% else %}
-        <div class="text-center p-5">
-            <i class="fas fa-school fa-3x text-muted mb-3"></i>
-            <h5 class="text-muted">No schools found</h5>
-            <p class="text-muted">No schools are available for your division in this sheet.</p>
+
+        {% if q or active_filters %}
+        <div class="mt-2">
+            {% if q %}
+                <span class="badge bg-info text-dark">q: "{{ q }}"</span>
+            {% endif %}
+            {% for k, v in active_filters.items() %}
+                <span class="badge bg-secondary">{{ k }}: {{ v }}</span>
+            {% endfor %}
         </div>
         {% endif %}
+    </div>
+  
+</form>
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    {% set query = request.args.to_dict() %}
+                    {% for col in columns %}
+                        {% set new_dir = 'desc' if sort==col and direction!='desc' else 'asc' %}
+                        {% set query2 = query.copy() %}
+                        {% set _ = query2.update({'sort': col, 'dir': new_dir}) %}
+                        <th>
+                            <a class="text-decoration-none" href="{{ url_for('view_sheet', table_name=table_name, **query2) }}">
+                                {{ col.replace('_',' ').title() }}
+                                {% if sort==col %}
+                                    {% if direction=='desc' %}▼{% else %}▲{% endif %}
+                                {% endif %}
+                            </a>
+                        </th>
+                    {% endfor %}
+                    {% if rows and rows[0].get('can_edit') is not none %}
+                    <th>Actions</th>
+                    {% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                    <tr>
+                        {% for col in columns %}
+                            <td>{{ row[col] }}</td>
+                        {% endfor %}
+                        {% if row.get('can_edit') is not none %}
+                        <td>
+                            {% if row.can_edit %}
+                                <a href="{{ url_for('edit_school', table_name=table_name, school_id=row.get('id', loop.index)) }}" class="btn btn-primary btn-sm">
+                                    <i class="fas fa-edit me-1"></i>Edit
+                                </a>
+                            {% else %}
+                                <button class="btn btn-outline-secondary btn-sm" disabled>
+                                    <i class="fas fa-eye me-1"></i>View Only
+                                </button>
+                            {% endif %}
+                        </td>
+                        {% endif %}
+                    </tr>
+                {% endfor %}
+                {% if rows|length == 0 %}
+                    <tr><td colspan="{{ columns|length + (1 if rows and rows[0].get('can_edit') is not none else 0) }}" class="text-center py-4">No data</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
     </div>
 </div>
 
 {% if sheet_data.editable_columns %}
 <div class="card mt-4">
     <div class="card-header">
-        <h6 class="mb-0">
-            <i class="fas fa-list me-2"></i>Editable Columns
-        </h6>
+        <h6 class="mb-0"><i class="fas fa-list me-2"></i>Editable Columns</h6>
     </div>
     <div class="card-body">
         <div class="row">

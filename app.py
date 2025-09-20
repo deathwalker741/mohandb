@@ -1,7 +1,18 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 import json
 import os
-from sqlalchemy import create_engine, text
+from sqlalchemy import (
+    create_engine,
+    text,
+    MetaData,
+    Table,
+    select,
+    and_,
+    or_,
+    asc,
+    desc,
+)
+from sqlalchemy.types import String, Text
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key')
@@ -41,10 +52,15 @@ def authenticate_user(email, password):
     return None
 
 def can_edit_school(user, school_data):
-    """Check if user can edit a specific school based on division"""
-    if user['division'] == 'All Divisions':
+    """Check if user can edit a specific school based on division/zone."""
+    if user.get('division') == 'All Divisions':
         return True
-    return school_data.get('zone', '') == user['division']
+    user_div = user.get('division')
+    # Try common column names
+    return (
+        str(school_data.get('zone', '')).strip() == str(user_div)
+        or str(school_data.get('division', '')).strip() == str(user_div)
+    )
 
 @app.route('/')
 def index():
@@ -89,45 +105,99 @@ def view_sheet(table_name):
         flash('Sheet not found!', 'error')
         return redirect(url_for('index'))
 
-    # Get search and filter parameters
-    search = request.args.get('search', '').strip()
-    division = request.args.get('division', '').strip()
+    # Reflect table
+    metadata = MetaData()
+    table = Table(table_name, metadata, autoload_with=engine)
+    all_columns = [c.name for c in table.columns]
 
-    # Build SQL query with filters
-    sql = f"SELECT * FROM {table_name}"
-    filters = []
-    params = {}
-    if search:
-        # Search in all text columns (school name, etc.)
-        filters.append("(" + " OR ".join([f"LOWER(CAST({col} AS TEXT)) LIKE :search" for col in ['name', 'school_name']]) + ")")
-        params['search'] = f"%{search.lower()}%"
-    if division:
-        filters.append("(division = :division OR zone = :division)")
-        params['division'] = division
-    if filters:
-        sql += " WHERE " + " AND ".join(filters)
-    sql += " ORDER BY id;"
+    # Preferred filter columns (use if present)
+    preferred = {
+        'division', 'zone', 'state', 'district', 'block', 'cluster',
+        'program', 'board', 'vendor', 'status'
+    }
+    filterable = [c for c in all_columns if c in preferred]
 
-    with engine.connect() as connection:
-        query = text(sql)
-        result = connection.execute(query, params).mappings().all()
-        columns = result[0].keys() if result else []
+    # Query params
+    q = request.args.get('q', '').strip()
+    sort = request.args.get('sort', '').strip()
+    direction = request.args.get('dir', 'asc').lower()
+    try:
+        page = max(1, int(request.args.get('page', 1)))
+        per_page = max(1, min(200, int(request.args.get('per_page', 50))))
+    except ValueError:
+        page, per_page = 1, 50
 
+    # Build filters from request args
+    active_filters = {}
+    for col in filterable:
+        val = request.args.get(col, '').strip()
+        if val:
+            active_filters[col] = val
+
+    # Base select
+    stmt = select(table)
+
+    # Search across string-like columns
+    if q:
+        string_cols = [c for c in table.c if isinstance(c.type, (String, Text))]
+        if string_cols:
+            stmt = stmt.where(or_(*[c.ilike(f"%{q}%") for c in string_cols]))
+
+    # Apply equality filters
+    for col, val in active_filters.items():
+        stmt = stmt.where(table.c[col] == val)
+
+    # Sorting
+    if sort in all_columns:
+        stmt = stmt.order_by(asc(table.c[sort]) if direction != 'desc' else desc(table.c[sort]))
+    elif 'id' in all_columns:
+        stmt = stmt.order_by(asc(table.c['id']))
+
+    # Pagination
+    stmt = stmt.limit(per_page).offset((page - 1) * per_page)
+
+    # Execute query and gather filter options
+    with engine.connect() as conn:
+        rows = conn.execute(stmt).mappings().all()
+        filter_options = {}
+        for col in filterable:
+            opt_stmt = select(table.c[col]).distinct().order_by(table.c[col]).limit(2000)
+            vals = [r[0] for r in conn.execute(opt_stmt).all() if r[0] not in (None, '')]
+            filter_options[col] = vals
+
+    # Compute editability per row
     user = session['user']
-    schools_list = [dict(school) for school in result]
+    schools_list = [dict(r) for r in rows]
     for school in schools_list:
         school['can_edit'] = can_edit_school(user, school)
 
     config = SHEET_CONFIGS[table_name]
     fixed_cols = config['fixed_columns']
+    sheet_data = {
+        'name': config['name'],
+        'columns': all_columns,
+        'fixed_columns': max(0, fixed_cols),
+        'editable_columns': [c for idx, c in enumerate(all_columns) if (idx + 1) > fixed_cols and c != 'id'] if fixed_cols >= 0 else [],
+    }
 
-    return render_template('sheet_view.html',
-                         sheet_name=config['name'],
-                         table_name=table_name,
-                         schools=schools_list,
-                         columns=columns,
-                         fixed_col_count=fixed_cols,
-                         user=user)
+    return render_template(
+        'sheet_view.html',
+        sheet_data=sheet_data,
+        table_name=table_name,
+        columns=all_columns,
+        rows=schools_list,  # also provide as rows
+        schools=schools_list,  # maintain compatibility
+        q=q,
+        filterable=filterable,
+        filter_options=filter_options,
+        active_filters=active_filters,
+        sort=sort,
+        direction=direction,
+        page=page,
+        per_page=per_page,
+        user=user,
+        request=request,
+    )
 
 @app.route('/edit/<table_name>/<int:school_id>')
 def edit_school(table_name, school_id):
